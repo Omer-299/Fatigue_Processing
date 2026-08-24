@@ -1,27 +1,35 @@
 % V5 - Removes the mean from the temperature segments in the TSA.
-clc; clear all; set(groot, 'defaultAxesGridColor', [0.5 0.5 0.5]); set(groot, 'defaultAxesGridAlpha', 0.8); set(groot, 'defaultAxesLineWidth', 1);
+clc; clear all; set(groot, 'defaultAxesGridColor', [0.0 0.0 0.0]); set(groot, 'defaultAxesGridAlpha', 0.7); set(groot, 'defaultAxesLineWidth', 1); set(groot, 'defaultAxesBox', 'on');
 close all;
 %% Input parameters
 % Averaging window size
-windowTSA = 3;
-windowDissipation = 3;  BW = 1; % bandwidth [Hz]
-movmeanFactor = 3;    % theta = movmean(theta, movmeanFactor);
+windowTSA = 5;
+windowDissipation = windowTSA;  BW = 1; % bandwidth [Hz]
+movmeanFactor = 1;    % theta = movmean(theta, movmeanFactor);
 
 %%
 % Force
-LF = 20; % Loading frequency in Hz
-Force_idxS = 33474; %33158; %9486; %17788; %10290; %10290;%9486; %31456; %17788; %16018; %19580; % %33954;  % value to be adjusted after reviewing 'Clean' force vs Index. Start point of proper loading - count the selected Fhigh (peak) from the start of the cyclic loading, and select the T_0D trough accordingly.
-Force_idxE = 719219; %726407; %719219; %374480; %374398; %154639; %726265; %154639; %374480; %726393; %374398; %726265;%726290; % %726975; % of Clean force % End index for force (last peak point) - To be found through force plot of 'clean force'. Clean force is the one which is plotted after removing the 'time' vector's duplicate values.
-minFthresh = 0.05;
+LF = 20; SF_F = 2000; % Loading an loading sampling frequency in Hz
+Force_idxS = 33474; %4197; %3900; %33407; %33451; %33481; %33491; %33447; %33428; %33462; % 33474; %33158; %9486; %17788; %10290; %10290;%9486; %31456; %17788; %16018; %19580; % %33954;  % value to be adjusted after reviewing 'Clean' force vs Index. Start point of proper loading - count the selected Fhigh (peak) from the start of the cyclic loading, and select the T0D trough accordingly.
+Force_idxE = 719219; %226076; %224923; %177368; %177666; %385341; %385043; %719259; %719643; %719471; %719219; %726407; %719219; %374480; %374398; %154639; %726265; %154639; %374480; %726393; %374398; %726265;%726290; % %726975; % of Clean force % End index for force (last peak point) - To be found through force plot of 'clean force'. Clean force is the one which is plotted after removing the 'time' vector's duplicate values.
+minFthresh = 0.02;
+% For Force through linear fitting
+dFmax_programmed = 0;
 
 % theta
 SF = 353; % Sampling frequency for thermal data (should be Verfied from the time_diff)
-temp_idxS = 8763; %19315; %30631; %10159; %18175; %18175; %18191;%30631; %9612; %10159; %8661;%13675+2; % %19156;%%5932 ; %8763; % Start index for theta (low peak in accordance to the count of Fhigh selected in Force_idxS) - To be found through temperature plot.
-temp_idxE = 129796; %140550; %94822; %72905; %43350;%43350; %94822; %131826; %72905; %133533;%137981; % %141019;% %129796; % End index for theta (last low peak) - To be found through temperature plot.
 
-% For Force through linear fitting
-% maxF = 3000; % Maximum force in N
-% maxF_increment_per_cycle = 1; % This is the desired f max increment per cycle fromt the machine.
+% Start index from T_noOffset (select the low peak in accordance to the count of Fhigh selected in Force_idxS) - To be found through T_noOffset plot.
+temp_idxS = 8760; %5777; %4605; %7784; %10849; %7489; %7656; %7589; %25346; %7479; %8760; %19315; %30631; %10159; %18175; %18175; %18191;%30631; %9612; %10159; %8661;%13675+2; % %19156;%%5932 ; %8763; 
+
+% End index from T_noOffset (last low peak) - To be found through T_noOffset plot.
+temp_idxE = 129796; %84101; %82627; %33192; %36299; %69592; %69706; %128631; %146463; %128561; %129796; %140550; %94822; %72905; %43350;%43350; %94822; %131826; %72905; %133533;%137981; % %141019;% %129796; 
+
+BeforeLoad_IdxEnd = 3562; % For spectral analysis of IR data (temperature data) in the no-load region of the test
+% noLoad_IdxEnd = This index from the raw experimental temperature data before the cold-working step
+
+% Ti indices: Stabilized T_noOffset used to calculate the specimen temperature before the loading starts.
+Ti_idxS = 8388;         Ti_idxE = 8530;  %Ti = mean(T_noOffset(Ti_idxS : Ti_idxE));
 
 %% SS316L 2026 tests
 % folderPath = 'C:\Users\mo170\OneDrive - The University of Waikato\PhD\Experiments\SS316_VAL\20260115\SS316L_20260115_1415_VIRG_Test-1_Take-1\Test1';
@@ -86,7 +94,7 @@ source_dir = pwd;
 % -- SS304
 % ###################
 % % Gage zone dimensions SS304L and SS316L
-thick = 1/1000;     width = 15/1000;    % Thickness 1mm for SS304 specimen    % Width 15mm for SS304 specimen
+thick_my = 1/1000;     width_my = 15/1000;    % Thickness 1mm for SS304 specimen    % Width 15mm for SS304 specimen
 
 % rho = 8000;     C = 500;    alpha = 17.3e-6;    tau = 72; %(68+76)/2; for SS304L
 % rho = 8000;     C = 500;    tau = 82.5; %(90+75)/2; for SS316L - material properties are almos same as SS304L
@@ -95,7 +103,7 @@ thick = 1/1000;     width = 15/1000;    % Thickness 1mm for SS304 specimen    % 
 % % Reference: https://www.matweb.com/search/DataSheet.aspx?MatGUID=edb229c36fc849628289705c796c4d89
 % % Thermal time constant in seconds - see the graphs of Tau estimation: SS304\A_TAU_MEASUREMENT\Return_to_ambiant_1 and Return_to_ambiant_2, with 68 and 76 seconds respectively.
 % Km = alpha / (rho * C);
-xarea = thick * width; % Cross-sectional area in m^2
+xarea = thick_my * width_my; % Cross-sectional area in m^2
 
 % -------- Material identification from folder name --------
 folderName = lower(folderPath);   % case-insensitive comparison
@@ -105,7 +113,7 @@ if contains(folderName, 'ss304','IgnoreCase', true)
     % SS 304L
     materialStr = 'SS304L';
     % Load tau(theta) lookup table
-    load('C:/Users/mo170/OneDrive - The University of Waikato/PhD/Experiments/PostProcessing/Fatigue_Processing/tau_table_SS316.mat');      % contains tau_table
+    % load('C:/Users/mo170/OneDrive - The University of Waikato/PhD/Experiments/PostProcessing/Fatigue_Processing/tau_table_SS316.mat');      % contains tau_table
     tau = 72;          % s  (mean of 68–76 s)
 
     rho   = 8000;          % kg/m^3
@@ -244,8 +252,18 @@ tF_diff = [nan;round(diff(tF),9)];
 
 % Determining the sampling frequency of force data by fatigue testing machine (Instron)
 mode_tF_diff =  mode(tF_diff);
-SF_F = round(1/mode_tF_diff, 9); % Sampling Frequency of Force data
-disp(['Sampling frequency of force data (SF-force) as per experimental data: ', num2str(SF_F), 'Hz']);  %
+SF_Fx = round(1/mode_tF_diff, 9); % Sampling Frequency of Force data
+% Check sampling frequency consistency
+tol = 1e-3;  % 0.001 Hz
+
+if abs(SF_Fx - SF_F) > tol
+    error('SamplingFrequencyMismatch:InconsistentValues', ...
+          ['Sampling frequencies do not match within tolerance.\n' ...
+           '   SF_Fx (Experiment) = %.4f Hz\n' ...
+           '   SF_F  (Record)     = %.4f Hz\n' ...
+           '   Difference         = %.4f Hz (Tolerance = %.3f Hz)'], ...
+           SF_Fx, SF_F, abs(SF_Fx - SF_F), tol);
+end
 
 %% --------- Cleaning time vector of force
 % Removing time values which are repeated consecutively
@@ -281,7 +299,7 @@ grid on
 % Clean Force vs index
 figure('Name', 'Clean force vs Index');
 plot(force_clean,'-k');
-title('Clean force vs Index',test_details)
+title(sprintf('Clean force vs Index - %s',test_details))
 legend('Clean force data','Location', 'northwest');
 xlabel('Index'); ylabel('Force (N)')
 grid on
@@ -294,7 +312,7 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 % % Clean Force vs clean time
 figure('Name', 'Clean force vs Time');
 plot(tF_clean,force_clean,'-k');
-title('Clean force vs Time',test_details)
+title(sprintf('Clean force vs Time - %s',test_details))
 legend('Clean force data','Location', 'northwest');
 xlabel('Time (s)'); ylabel('Force (N)')
 grid on
@@ -310,11 +328,11 @@ force = force_clean;
 %% ----- Extracting fatigue loading period and Loading frequency calculation from experimental data
 F_fatigue = force(Force_idxS:Force_idxE); % Only selecting the force data relevant to fatigue loading, excluding the hardening loading
 tF_fatigue = tF(Force_idxS:Force_idxE); % Only selecting the force data relevant to fatigue loading, excluding the hardening period
-tF_fatigue = tF_fatigue - tF_fatigue(1); % Starting time from zero
+% tF_fatigue = tF_fatigue - tF_fatigue(1); % Starting time from zero
 
 figure('Name', 'Fatigue force vs time')
 plot(tF_fatigue,F_fatigue)
-title('Fatigue force vs Time',test_details)
+title(sprintf('Fatigue force vs Time - %s',test_details))
 xlabel('Time (s)'); ylabel('Force (N)')
 grid on
 % --- Save figure ---
@@ -325,7 +343,7 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 % Separating high and low peaks
 minProminence = minFthresh * max(F_fatigue); % Minimum peak prominence
-[Fhighs, locs_highs] = findpeaks(F_fatigue, 'MinPeakProminence', minProminence);
+[Fpk, locs_highs] = findpeaks(F_fatigue, 'MinPeakProminence', minProminence);
 time_Fhighs = tF_fatigue(locs_highs);
 
 LF_exp = 1 / mode(round(diff(time_Fhighs),9));
@@ -346,7 +364,7 @@ Loading = F_fatigue; %(Force_idxS:Force_idxE);
 N_Loading = length(Loading);
 
 N_LoadingTrunc = N_Loading; % Finding the maximum length of force data which has integer number of cycles
-while mod(N_LoadingTrunc, LF) >= 1e-9
+while mod(N_LoadingTrunc, SF_F/LF) >= 1e-9
     N_LoadingTrunc = N_LoadingTrunc -1;
 end
 
@@ -365,12 +383,18 @@ P1Loading(1) = NaN; % Remove DC component
 figure('Name', 'Force Amplitude Spectrum');
 % plot(fLoading, log(P1Loading), '.r', 'MarkerSize', 5, DisplayName='Loading'); hold on;
 plot(fLoading, log(P1Loading), '.r', 'MarkerSize', 5, DisplayName='Loading'); hold on;
-title('Loading Single-Sided Amplitude Spectrum (DC Removed)', test_details);
+title(sprintf('Loading Amplitude Spectrum - %s', test_details)); % (DC Removed)
 xlabel('Frequency (Hz)');
 xticks (0:LF:max(fLoading))
 ylabel('Log Amplitude (N)');
 grid on;
 legend
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 
 %% Load thermal data
@@ -381,22 +405,22 @@ IRtime = IRtime(:);
 fprintf('\nFirst time in thermal data: %0.5fs. This time is subtracted to start from zero\n', IRtime(1));
 
 % figure('Name', 'Raw T0D vs Raw IR time');
-% plot(IRtime,T_0D,'-k')
+% plot(IRtime,T0D,'-k')
 % title('Raw T0D vs Raw IR time')
-% hold on; plot(IRtime,T_0D,'.r', MarkerSize=5)
+% hold on; plot(IRtime,T0D,'.r', MarkerSize=5)
 % grid on
 % xlabel('Time(s)')
 % ylabel('Temperature (K)')
 
 IRtime = IRtime - IRtime(1); % Start time at zero
 
-T_0D = T_0D(:);
+T0D = T_0D(:);
 T_ref_up = T_ref_up(:);
 T_ref_bottom = T_ref_bottom(:);
 
 % === CALCULATE TEMPORAL NOISE ===
-mean_T = mean(T_0D(1:1000));
-std_T = std(T_0D(1:1000));  % Standard deviation with N-1 normalization
+mean_T = mean(T0D(1:1000));
+std_T = std(T0D(1:1000));  % Standard deviation with N-1 normalization
 
 % === OUTPUT ===
 % fprintf('Mean Temperature = %.4f C\n', mean_T);
@@ -415,7 +439,10 @@ if abs(SF_exp - SF) > checkSF
     %     SF = SF_exp;
 end
 
-%% --- Repair IR time vector segment-wise  ---
+%% --- Repair IR Time vector segment-wise  ---
+% This is not a proper repair. There are instances of dropped frames or
+% multiple erratic values consecutively, these kind of errors are not
+% addressed by this repair.
 % close all
 N = length(IRtime);
 IRtime_ok = IRtime;          % start with a copy
@@ -498,8 +525,8 @@ grid on
 
 %% Temperature offset removal
 
-T_ref = 0.5 * T_ref_up + 0.5 * T_ref_bottom; % Average reference temperature
-T_noOffset = T_0D - T_ref; % Remove reference temperature offset
+T_ref = 0.5 * (T_ref_up + T_ref_bottom); % Average reference temperature
+T_noOffset = T0D - T_ref; % Remove reference temperature offset
 
 % === CALCULATE TEMPORAL NOISE ===
 mean_TnoOffset = mean(T_noOffset(1:1000));
@@ -512,11 +539,11 @@ std_TnoOffset = std(T_noOffset(1:1000));  % Standard deviation with N-1 normaliz
 
 % thermal display --- Experimental temperature vs Index
 figure('Name','Experimental Temperature Data vs Index');
-plot(T_0D, '-k');
-title('Experimental Temperature Data',test_details)
+plot(T0D, '-r');
+title(sprintf('Experimental Temperature Data vs Index - %s',test_details))
 hold on
-plot(T_ref_up,'-r');
-plot(T_ref_bottom,'-b');
+plot(T_ref_up,'-b');
+plot(T_ref_bottom,'-g');
 xlabel('Index');
 ylabel('Temperature (K)')
 legend('T0D','Tref up', 'Tref bottom', 'Location', 'northwest');
@@ -528,13 +555,13 @@ figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like 
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-% Experimental temperature data vs time
+% ------------Experimental temperature data vs time
 figure('Name','Experimental Temperature Data vs Time');
-plot(IRtime_ok,T_0D,'-k');
-title('Experimental Temperature Data',test_details)
+plot(IRtime_ok,T0D,'-r');
+title(sprintf('Experimental Temperature Data vs Time - %s',test_details))
 hold on
-plot(IRtime_ok,T_ref_up,'-r');
-plot(IRtime_ok,T_ref_bottom,'-b');
+plot(IRtime_ok,T_ref_up,'-b');
+plot(IRtime_ok,T_ref_bottom,'-g');
 xlabel('Time (s)');
 ylabel('Temperature (K)')
 legend('T0D','Tref up', 'Tref bottom', 'Location', 'northwest');
@@ -566,11 +593,19 @@ grid on
 
 %% T_noOffset_fatigue
 % Selecting the temperature data relevant for the fatigue loading. Start
-% and End Index to found by observing the raw temperature (T_0D) and force
+% and End Index to found by observing the raw temperature (T0D) and force
 % plots
 
-tTheta = IRtime_ok (temp_idxS:temp_idxE);
-tTheta = tTheta - tTheta(1); % starting time from 0.
+tTheta = IRtime_ok(temp_idxS:temp_idxE);
+
+dt = tTheta(1) - tF_fatigue(1);
+if dt > 0
+    tF_fatigue = tF_fatigue + dt;
+elseif dt < 0
+    tTheta = tTheta - dt;
+end
+
+% tTheta = tTheta - tTheta(1); % starting time from 0.
 
 figure('Name','IR and Force time vectors during fatigue loading');
 plot(tTheta,'-r');
@@ -580,8 +615,14 @@ grid on
 legend ('IR time','Force time')
 
 T_noOffset_fatigue = T_noOffset(temp_idxS:temp_idxE);
+T0D_fatigue = T0D(temp_idxS:temp_idxE);
+T_ref_up_fatigue = T_ref_up(temp_idxS:temp_idxE);
+T_ref_bottom_fatigue = T_ref_bottom(temp_idxS:temp_idxE);
 
 %% Basic correction of T_noOffset_fatigue
+% In this correction only those instances are corrected which have a single
+% erratic value in betwrrn two proper values. This correction does not
+% address the dropped frames and multiple consecutive erratic values.
 % --- Initialisation ---
 X = T_noOffset_fatigue(:);     % ensure column vector
 X_clean = X;
@@ -676,19 +717,20 @@ plot(X_clean,'--r')
 title('Cleaned T-no-offset')
 legend('Original','Cleaned')
 
+
 figure('Name','Difference: Original - Cleaned')
 plot(X - X_clean); grid on
-title('Correction magnitude')
+title('T-noOffset - T-noOffset-clean')
 
 
 %%
 T_noOffset_fatigue = X_clean;
 
-%%
-% T_0D_fatigue = T_0D (temp_idxS:temp_idxE);
+%% Calculatin of theta and plotting
+% T0D_fatigue = T0D (temp_idxS:temp_idxE);
 % % Experimental temperature data (fatigue period) vs time
 % figure
-% plot(tTheta,T_0D_fatigue,'-k');
+% plot(tTheta,T0D_fatigue,'-k');
 % title('Experimental Temperature Data',test_details)
 % xlabel('Time (s)');
 % ylabel('Temperature (K)')
@@ -701,10 +743,9 @@ T_noOffset_fatigue = X_clean;
 
 % ##############################
 % ##############################
-theta = T_noOffset_fatigue - mean(T_noOffset_fatigue(1:50));
-% theta = Theta;
-
-% theta = movmean(theta, movmeanFactor);
+Ti = mean(T_noOffset(Ti_idxS : Ti_idxE));
+theta = T_noOffset_fatigue - Ti;
+theta = theta(:);
 
 % === CALCULATE TEMPORAL NOISE ===
 % mean_theta = mean(theta(1:500));
@@ -717,7 +758,7 @@ theta = T_noOffset_fatigue - mean(T_noOffset_fatigue(1:50));
 % theta display --- theta vs index
 figure('Name','theta vs index')
 plot(theta)
-title('\theta',test_details)
+title(sprintf('theta %s',test_details))
 xlabel('Index');
 ylabel('\theta (K)')
 legend('\theta','Location', 'northwest');
@@ -728,14 +769,21 @@ figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like 
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-% theta display --- theta vs time
+%% theta display --- theta vs time
+% theta(1) = NaN;
+% theta(2) = 0;
 figure('Name','theta vs time')
-plot(tTheta, theta)
-title('\theta', test_details)
+plot(tTheta, theta,'r',LineWidth=2)
+% hold on; xline(24.8, '--r',LineWidth=4)
+title(sprintf('theta %s',test_details))
 xlabel('Time (s)');
 ylabel('\theta (K)')
-legend('\theta','Location', 'northwest');
+% legend('\theta','Location', 'northwest');
 grid on
+set(gcf,'MenuBar','figure','ToolBar','figure');
+set(gcf,'Position',[600 200 580 450])
+
+
 % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
 figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
@@ -746,6 +794,7 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 %%
 % ############### Segmentation of time vector based on violation of
 % delta(time) from 1/SF +/- tolerance
+% This part address the dropped frames errors in the time vector
 % ###################################
 
 % tTheta = IRtime(temp_idxS:temp_idxE);
@@ -919,7 +968,9 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 % tTheta = ThetaTime_corrected;
 
 %%
-% ########### Correction of the theta
+% ########### Correction of the theta - This correction addresses the
+% dropped frames issue. It is dependent on the dropped frames correction of
+% time vector.
 
 % Segmentation of theta - Expansion of theta - Linearised filling of missing values
 
@@ -1028,278 +1079,47 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 % fprintf('Inserted samples   : %d\n', Nins)
 % fprintf('Final sample count : %d\n', Ncorr)
 
-%% -------------------------------
-% Further correction of theta - I tried many methods to automat the
-% correction but no method worked for me, so I need to manually correct the
-% erratic pattern. I basically replace the erratic values with adjacent
-% values
-% theta_filled(3725+16:3741+16)=theta_filled(3708+16:3724+16);
-% theta_filled(5891+16:5901+16)=theta_filled(5873+16:5883+16);
-% theta_filled(5873+16:5890+16)=theta_filled(5855+16:5872+16);
-% theta_filled(5914+16:6114+16)=theta_filled(6124+16:6324+16);
-% theta_filled(3725+16:3741+16)=theta_filled(3708+16:3724+16);
-% theta_filled(5913+16)=mean([theta_filled(5913-1+16), theta_filled(5913+1+16)]);
-% theta_filled(10106+1+16:10111-1+16) = theta_filled(10089+1+16:10093+16);
-% theta_filled(10110+16)=mean([theta_filled(10109+16), theta_filled(10111+16)]);
-% theta_filled(22401+1+16:22406-1+16) = theta_filled(22384+16:22387+16)+0.0109;
-% theta_filled(22704+16)=theta_filled(22702+16);
-% theta_filled(22709+16:22712+16) = theta_filled(22691+16:22694+16);
-%
-%
-%
-% theta_filled(22492+16) = theta_filled(22491+16)-0.0110;
-%
-% theta_filled(22493+16:22496-1+16)=theta_filled(22476+16:22476+2+16);
-% theta_filled(44122+1:44127-1)=theta_filled(44105:44108);
-%
-% % -------------------------------
-% figure ('Name','theta Linear Interpolation vs Time')
-% plot(ThetaTime_corrected, theta_filled)
-% grid on
-% xlabel('Time (s)')
-% ylabel('\theta')
-% title('\theta After Manual Correction')
-%
-%
-% % close all
-% figure ('Name','theta Linear Interpolation vs Index')
-% plot(theta_filled)
-% grid on
-% xlabel('Index')
-% ylabel('\theta')
-% title('\theta After Manual Correction')
-%
-% figure('Name','theta filled');
-% % plot(abs(diff(diff(theta_filled)))); grid
-% plot((diff(diff(theta_filled)))); grid
-% title ('abs(diff(diff (theta filled)))')
-% xlabel('Index')
-% ylabel('(diff(diff (theta filled)))')
-%
-%
-% %%
-% theta = theta_filled;
-%% Normalize force and theta for visualization (0.5 seconds)
-time_duration = 0.5; % Time window in seconds
-samples_force = round(time_duration * SF_F); % Number of force samples
-samples_theta = round(time_duration * SF); % Number of theta samples
-idx_start_force = length(F_fatigue) - samples_force + 1; % Start index for force
-idx_start_theta = length(theta) - samples_theta + 1; % Start index for theta
+%% Check for time duration match/mismatch
 
-% Calculate mean for normalization
-mean_force = abs(mean(F_fatigue(idx_start_force:end))); % Mean absolute force
-mean_theta = abs(mean(theta(idx_start_theta:end))); % Mean absolute theta
+theta_time_duration = tTheta(end) - tTheta(1)
+Force_time_duration = tF_fatigue(end) - tF_fatigue(1)
+time_diff = abs(Force_time_duration - theta_time_duration)
 
-% Normalize force and theta using original experimental data
-norm_force = F_fatigue(idx_start_force:end) / mean_force; % Normalized force
-norm_theta = theta(idx_start_theta:end) / mean_theta; % Normalized theta
-
-% Create time vectors for normalized data
-t_force = time_duration:-1/SF_F:0; % Reverse time vector for force
-t_force = flip(t_force(1:length(norm_force))); % Flip and trim to match norm_force
-t_theta = time_duration:-1/SF:0; % Reverse time vector for theta
-t_theta = flip(t_theta(1:length(norm_theta))); % Flip and trim to match norm_theta
-
-% --- Normalized force and theta
-figure;
-plot(t_force, norm_force, 'b.-', 'MarkerSize', 10);
-title('Normalized Force and Theta (Last 0.5s of Loading)', test_details);
-ylabel('Force [N] (normalized)');
-hold on;
-yyaxis right;
-plot(t_theta, norm_theta, 'r.--', 'MarkerSize', 6);
-xlabel('Time (s)');
-ylabel('\theta (K) (normalized)');
-xlim([0 0.52]);
-grid on;
-legend('Force', '\theta','Location', 'northwest');
-
-%% Synchronize force and theta
-tTheta(end)
-tF_fatigue(end)
-tTheta_sync = tTheta;
-tF_sync = tF_fatigue;
-
-tForce_rel = tF_sync - tF_sync(end);
-tTheta_rel = tTheta_sync - tTheta_sync(end);
-t_common_start = max(tForce_rel(1), tTheta_rel(1));
-idx_f_sync = find(tForce_rel >= t_common_start);
-idx_Theta_sync = find(tTheta_rel >= t_common_start);
-
-if idx_Theta_sync(1) > idx_f_sync(1) % if IR recording started earlier than the loading, which is true in most of the cases.
-    tF_sync = tF_sync + tTheta_sync(idx_Theta_sync(1));
-    t_sync = tF_sync;
-else
-    tTheta_sync = tTheta_sync + tF_sync(idx_f_sync(1));
-    t_sync = tTheta_sync;
-end
-
-figure('Name','Sync times');
-title('Sync times')
-plot(tF_sync,'-r', LineWidth=3);
-hold on;
-plot(tF_sync,'.k');
-plot(tTheta_sync,'-b', LineWidth=3)
-plot(tTheta_sync,'.g')
-legend ('tFsync','','tTheta sync')
-grid on
-
-%% ######################### Another method of synchronization
-dt_theta = mode(diff(tTheta));
-
-tTheta(end)
-tF_fatigue(end)
-tEnd_maxA = max(tTheta(end), tF_fatigue(end))
-t_diff = tTheta(end) - tF_fatigue(end)
-t_sync = (0:dt_theta:tEnd_maxA);
-t_sync = t_sync(:);
-
-% shape-preserving interpolation
-% I am preferring shape-preserving spline interpolation 'pchip'
-% interpolation over the linear interpolation, as the 'pchip' provides better
-% match the original Force profile
-% F_fatigue_flip = fliplr(F_fatigue);
-% theta_flip = fliplr(theta);
-
-F_Sync = interp1(tF_fatigue, F_fatigue, t_sync, 'pchip');
-thetaSync = interp1(tTheta, theta, t_sync, 'pchip');
-
-% F_sync_interp = fliplr(F_sync_interp);
-% theta_sync_interp = fliplr(theta_sync_interp);
-
-% ---------
-figure('Name','MY Interpolated Sychronized F & theta')
-plot(t_sync,F_Sync,'-k')
-title('MY Interpolated Synchronisation: Force and \theta', test_details)
-hold on;
-plot(t_sync,F_Sync,'.b')
-xlabel('Time (s)');
-ylabel('Force [N]')
-yyaxis right
-plot(t_sync, thetaSync,'-m')
-plot(t_sync, thetaSync,'.g')
-ylabel('\theta (K)');
-legend('F-interpolated','\theta-interpolated','Location', 'northwest');
-grid on
-
-% ==============================================================
-
-[FhighsA, locs_FhighsA] = findpeaks(F_Sync, 'MinPeakProminence', minProminence);
-N = numel(F_Sync);
-
-% --- Manual test for first point ---
-if F_Sync(1) > F_Sync(2)
-    FhighsA = [F_Sync(1); FhighsA];
-    locs_FhighsA = [1; locs_FhighsA];
-end
-% --- Manual test for last point ---
-if F_Sync(N) > F_Sync(N-1)
-    FhighsA = [FhighsA; F_Sync(N)];
-    locs_FhighsA = [locs_FhighsA; N];
-end
-time_FhighsA = t_sync(locs_FhighsA);
-
-
-[FlowsA, locs_FlowsA] = findpeaks(-F_Sync, 'MinPeakProminence', minProminence);
-FlowsA = -FlowsA;
-time_FlowsA = t_sync(locs_FlowsA);
-
-
-% ---------
-figure('Name','Force and Theta Synchronisation')
-plot(t_sync,F_Sync,'-k')
-title('Force and \theta Synchronisation', test_details)
-hold on;
-plot(time_FhighsA,FhighsA,'.r')
-plot(time_FlowsA,FlowsA,'.b')
-xlabel('Time (s)');
-ylabel('Force [N]')
-yyaxis right
-plot(t_sync, thetaSync)
-ylabel('\theta (K)');
-legend('F-filtered','highs','lows','\theta','Location', 'northwest');
-grid on
-
-
-%% Process force data: clean cyclic portion of the force data
-% % Separating high and low peaks
-% % minProminence = 0.05 * max(F_sync); % Minimum peak prominence
-%
-% % --- Find internal peaks ---
-% [Fhighs, locs_highs] = findpeaks(F_fatigue, 'MinPeakProminence', minProminence);
-% N = numel(F_fatigue);
-%
-% % --- Manual test for first point ---
-% if F_fatigue(1) > F_fatigue(2)
-%     Fhighs = [F_fatigue(1); Fhighs];
-%     locs_highs = [1; locs_highs];
+checkTimeDuration = 0.01;
+% if time_diff > checkTimeDuration
+%     error('Time mismatch: %.6g s > %.6g s.', time_diff, checkTimeDuration);
 % end
-%
-% % --- Manual test for last point ---
-% if F_fatigue(N) > F_fatigue(N-1)
-%     Fhighs = [Fhighs; F_fatigue(N)];
-%     locs_highs = [locs_highs; N];
-% end
-% Time_highs = tF_sync(locs_highs);
-%
-%
-% [Flows, locs_lows] = findpeaks(-F_fatigue, 'MinPeakProminence', minProminence);
-% Flows = -Flows;
-% Time_lows = tF_sync(locs_lows);
-%
-% % Combine and sort extrema
-% all_locs = [locs_highs; locs_lows]; %; 1; length(F_sync)];
-% % all_vals = [Fhighs; Flows]; %; F_sync(1); F_sync(end)];
-% sort_idx = sort(all_locs);
-%
-% F_filtered = F_fatigue(sort_idx);
-% tF_filtered = tF_sync(sort_idx);
-%
-% % ---------
-% figure
-% plot(F_filtered,'-k')
-% title('F-filtered vs Index', testName_withDate)
-% hold on; plot(F_filtered,'.r')
-% xlabel('Index');
-% ylabel('Force [N]')
-% grid on
-%
-% % ---------
-% figure('Name','Force and Theta Synchronisation')
-% plot(tF_filtered,F_filtered,'-k')
-% title('Force and \theta Synchronisation', testName_withDate)
-% hold on;
-% plot(Time_highs,Fhighs,'.r')
-% plot(Time_lows,Flows,'.b')
-% xlabel('Time (s)');
-% ylabel('Force [N]')
-% yyaxis right
-% plot(tTheta_sync, theta)
-% ylabel('\theta (K)');
-% legend('F-filtered','highs','lows','\theta','Location', 'northwest');
-% grid on
-%
-% %  ---Diff(F_filtered)
-% figure
-% plot(diff(F_filtered),'Color', [0.8 0.8 0.8])
-% title('diff(F filtered)', testName_withDate)
-% hold on
-% plot(diff(F_filtered),'.r',MarkerSize=20 ) % It is important to plot the '.' after plotting the lines
-% xlabel('Index');
-% ylabel('Force [N]')
-% grid on
+
+figure('Name','Fatigue load and theta in one plot')
+plot(tF_fatigue, F_fatigue)
+ylabel('Force (N)')
+hold on
+yyaxis right
+plot(tTheta, theta)
+ylabel('\theta (K)')
+xlabel('Time (s)')
+title('Fatigue loading and theta in one plot')
+grid on
 
 %% Calculating slope of high and low forces for the Stress amplitude calculation
 % Robust linear regression
+minProminence = minFthresh * max(F_fatigue); % Minimum peak prominence
 
-Time_highs = time_FhighsA;
-Fhighs = FhighsA;
+[Fpk, Fpk_loc] = findpeaks(F_fatigue,'MinPeakProminence', minProminence);         % local maxima
+[Ftr_raw, Ftr_loc] = findpeaks(-F_fatigue,'MinPeakProminence', minProminence);    % raw minima (troughs)
+Ftr = -Ftr_raw;
 
-Time_lows = time_FlowsA;
-Flows = FlowsA;
+Time_highs = tF_fatigue(Fpk_loc); %
+Time_lows = tF_fatigue(Ftr_loc); %
 
-[bH, statsH] = robustfit(Time_highs(:), Fhighs(:));
-[bL, statsL] = robustfit(Time_lows(:),  Flows(:));
+n = min(numel(Fpk), numel(Ftr));
+Fpk = Fpk(1:n);
+Ftr = Ftr(1:n);
+Time_highs = Time_highs(1:n);
+Time_lows  = Time_lows(1:n);
+
+[bH, statsH] = robustfit(Time_highs(:), Fpk(:));
+[bL, statsL] = robustfit(Time_lows(:),  Ftr(:));
 
 % Extract slope/intercept to cleaner variables
 aH = bH(1);        % intercept
@@ -1320,31 +1140,39 @@ fprintf('RMSE (Highs): \xB1%.2f N\n', RMSE_H);
 fprintf('RMSE (Lows) : \xB1%.2f N\n', RMSE_L);
 
 % 4. Plot original data and fitted lines
-Fhigh_fit = mH * t_sync + aH; % y = mx +b; linear equation
-Flow_fit = mL * t_sync + aL;
+Fhigh_fit = mH * tF_fatigue + aH; % y = mx +b; linear equation
+Flow_fit = mL * tF_fatigue + aL;
 
 % Compute R² for both fits
-SS_res_H = sum((Fhighs - (aH + mH*Time_highs)));
-SS_tot_H = sum((Fhighs - mean(Fhighs)));
-R2_H = 1 - SS_res_H/SS_tot_H;
+% Highs
+yH_fit = aH + mH * Time_highs;
 
-SS_res_L = sum((Flows - (aL + mL*Time_lows)));
-SS_tot_L = sum((Flows - mean(Flows)));
-R2_L = 1 - SS_res_L/SS_tot_L;
+SS_res_H = sum((Fpk - yH_fit).^2);
+SS_tot_H = sum((Fpk - mean(Fpk)).^2);
+R2_H = 1 - SS_res_H / SS_tot_H;
 
-figure; hold on; grid on;
+% Lows
+yL_fit = aL + mL * Time_lows;
+
+SS_res_L = sum((Ftr - yL_fit).^2);
+SS_tot_L = sum((Ftr - mean(Ftr)).^2);
+
+R2_L = 1 - SS_res_L / SS_tot_L;
+
+figure('Name','Linear Fits for Fhigh and Flow')
+hold on; grid on;
 
 % Plot data
-scatter(Time_highs, Fhighs, 40, 'r', 'filled');
-scatter(Time_lows,  Flows,  40, 'b', 'filled');
+scatter(Time_highs, Fpk, 40, 'r', 'filled');
+scatter(Time_lows,  Ftr,  40, 'b', 'filled');
 
 % Plot fits
-plot(t_sync, Fhigh_fit, '-g', 'LineWidth', 2);
-plot(t_sync, Flow_fit,  '-m', 'LineWidth', 2);
+plot(tF_fatigue, Fhigh_fit, '-g', 'LineWidth', 2);
+plot(tF_fatigue, Flow_fit,  '-m', 'LineWidth', 2);
 
 xlabel('Time (s)');
 ylabel('Force (N)');
-title('Robust Linear Fits for F_{high} and F_{low}', test_details);
+title(sprintf('Robust Linear Fits for F_{high} and F_{low} - %s', test_details));
 
 legend('Fhighs data','Flows data','High fit','Low fit','Location', 'northwest');
 
@@ -1368,6 +1196,11 @@ text(xMin + 0.02*(xMax-xMin), yMax - 1.5*yOffset, ...
     'Color','m','FontSize',12,'VerticalAlignment','top');
 
 hold off;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 % --- Compute Force Amplitude ---
 Famp_fit = (Fhigh_fit - Flow_fit)/2;
@@ -1375,48 +1208,104 @@ Famp_fit = (Fhigh_fit - Flow_fit)/2;
 % --- Compute Stress Amplitude ---
 Samp = Famp_fit / xarea / 1e6;  % in MPa
 
+
+% ----------- Fmax Increment/cycle: Experimental vs Programmed
+cycleNum = (1:length(Fpk))';
+
+% Linear regression of Fhighs vs. cycle number
+p = polyfit(cycleNum, Fpk, 1);
+dFmax_exp = p(1);
+
+% Deviation between experimental and theoretical slope
+deviation = abs(dFmax_exp - dFmax_programmed) / dFmax_programmed * 100;
+
+fprintf('Programmed Fmax Increment:   %.3f N/cycle\n', dFmax_programmed);
+fprintf('Experimental Fmax Increment: %.3f N/cycle\n', dFmax_exp);
+fprintf('Deviation:          %.2f %%\n', deviation);
+
+% --- Plot Fmax increment comparison ---
+figure('Name','dFmax/cycle');
+plot(cycleNum, Fpk, '.k', 'DisplayName', 'Measured F_{max}');
+hold on;
+plot(cycleNum, polyval(p, cycleNum), '-r', 'LineWidth', 1.5, 'DisplayName', sprintf('Fit (%.2f N/cycle)', dFmax_exp));
+plot(cycleNum, dFmax_programmed*cycleNum + Fpk(1), '--b', 'LineWidth', 1.5, 'DisplayName', sprintf('Programmed (%.2f N/cycle)', dFmax_programmed));
+xlabel('Cycle number');
+ylabel('F_{max} (N)');
+title(sprintf('F_{max} increment per cycle: Experimental vs Programmed - %s', test_details));
+legend('Location', 'northwest');
+grid on;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
 % --- Plot Force Amplitude ---
-figure;
-plot(t_sync, Famp_fit, 'b', 'LineWidth', 2);
-title('Amplitude vs Time', test_details);
+figure('Name','Force and Stress Amplitude vs Time');
+plot(tF_fatigue, Famp_fit, 'b', 'LineWidth', 2);
+title(sprintf('Force and Stress Amplitude vs Time - %s', test_details));
 xlabel('Time (s)'); ylabel('Force Amplitude (N)');
 grid on;
 
 yyaxis right
-plot(t_sync, Samp, 'r', 'LineWidth', 2); grid on;
+plot(tF_fatigue, Samp, 'r', 'LineWidth', 2); grid on;
 ylabel('Stress Amplitude (MPa)');
 legend('Famp','Samp')
 
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
 %--- Plot Fit Forces ---
-figure; hold on; grid on;
-plot(t_sync, Fhigh_fit, '-r', 'LineWidth', 2);
-plot(t_sync, Flow_fit,  '-b', 'LineWidth', 2);
-plot(t_sync, Famp_fit, '-k', 'LineWidth', 2);          % amplitude fit
+figure('Name','Fit plots: Fhighs, Flows, Famp vs Time'); 
+hold on; grid on;
+plot(tF_fatigue, Fhigh_fit, '-r', 'LineWidth', 2);
+plot(tF_fatigue, Flow_fit,  '-b', 'LineWidth', 2);
+plot(tF_fatigue, Famp_fit, '-k', 'LineWidth', 2);          % amplitude fit
 xlabel('Time (s)'); ylabel('Force (N)');
 title('Fit plots: Fhighs, Flows, Famp vs Time', test_details);
 legend('Fhigh fit','Flow fit','Famp fit','Location','northwest');
 hold off;
 
 % --- Plot Stress -----
-figure; hold on; grid on;
-plot(t_sync, Fhigh_fit/xarea/1e6, '-r', 'LineWidth', 2);
-plot(t_sync, Flow_fit/xarea/1e6,  '-b', 'LineWidth', 2);
-plot(t_sync, Samp, '-k', 'LineWidth', 2);          % amplitude fit
+figure('Name','Stress vs Time'); 
+hold on; grid on;
+plot(tF_fatigue, Fhigh_fit/xarea/1e6, '-r', 'LineWidth', 2);
+plot(tF_fatigue, Flow_fit/xarea/1e6,  '-b', 'LineWidth', 2);
+plot(tF_fatigue, Samp, '-k', 'LineWidth', 2);          % amplitude fit
 xlabel('Time (s)'); ylabel('Stress (MPa)');
 title('Stress vs Time', test_details);
 legend('Shighs','Slows','Samp','Location','northwest');
 hold off;
 
+% --- Plot theta and Stress -----
+figure('Name','Theta and Stress vs Time'); 
+plot(tTheta, theta, '-b'); grid on; 
+hold on;
+xlabel('Time (s)'); ylabel('\theta (K)');
+yyaxis right
+plot(tF_fatigue, Samp, '-r', 'LineWidth', 2);          % amplitude fit
+ylabel('Stress (MPa)');
+title(sprintf('theta and Stress vs Time - %s', test_details));
+legend('\theta','Samp','Location','northwest');
+hold off;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-%% Calculate mechanical dissipation
-thetaSync = thetaSync(:);
+%% -------  T0D: Calculate mechanical dissipation
 
 SFnewDissipation = round(windowDissipation * SF, 9);
 if mod(SFnewDissipation,2) == 0
     SFnewDissipation = SFnewDissipation + 1; % Ensure odd number for convolution
 end
 
-movmean_theta = movmean(thetaSync, SFnewDissipation, 'endpoints','fill');
+movmean_theta = movmean(theta, SFnewDissipation, 'endpoints','fill');
 
 % ------------------------------ tau(theta)
 
@@ -1465,13 +1354,13 @@ end
 
 
 % --------------------------- d1
-d1 = nan(size(thetaSync));
+d1 = nan(size(theta));
 kd = (SFnewDissipation-1)/2;
 
-for k = SFnewDissipation : length(thetaSync) - (SFnewDissipation - 1)
+for k = SFnewDissipation : length(theta) - (SFnewDissipation - 1)
     d1(k) = rho * C * ( ...
         (movmean_theta(k+kd) - movmean_theta(k-kd)) / ...
-        (t_sync(k+kd) - t_sync(k-kd)) + ...
+        (tTheta(k+kd) - tTheta(k-kd)) + ...
         movmean_theta(k) / tau_exp(k) );
 end
 
@@ -1482,14 +1371,14 @@ d1 = d1/1000; % Converting units into kilo
 % end
 
 figure('Name','d1, Theta, and Avg.Theta vs Time')
-plot(t_sync, thetaSync)
+plot(tTheta, theta); grid on;
 hold on;
-plot(t_sync, movmean_theta, '-r', LineWidth=1.5)
-title('d1, \theta and Avg.\theta vs Time', test_details)
+plot(tTheta, movmean_theta, '-r', LineWidth=1.5)
+title(sprintf('d1, \theta and Avg.\theta vs Time (%.0fs window) %s)', windowDissipation, test_details))
 grid on
 ylabel('\theta (K)');
 yyaxis right
-plot(t_sync, d1, '-b',LineWidth=3)
+plot(tTheta, d1, '-b',LineWidth=3)
 ax = gca;
 ax.YAxis(2).Color = 'b';
 xlabel('Time (s)')
@@ -1500,30 +1389,30 @@ legend('\theta','Avg.\theta','d1','Location', 'northwest');
 D1 = d1 / LF; % Normalize by loading frequency
 
 % Interpolate stress amplitude to theta time vector
-SampInterp = interp1(t_sync, Samp, t_sync, 'linear');
+SampInterp = interp1(tF_fatigue, Samp, tTheta, 'linear');
 
 
 figure('Name','Checking Samp interpolation')
-plot(t_sync, Samp, LineWidth=2);
+plot(tF_fatigue, Samp, LineWidth=2);
 title('Checking Samp interpolation', test_details)
 hold on;
-plot(t_sync,SampInterp, '--r',LineWidth=2);
+plot(tTheta,SampInterp, '--r',LineWidth=2);
 legend ('SampLoading-fit','Samp interpolated','Location', 'northwest');
 ylabel('Stess Amplitude (MPa)')
 xlabel('Time (s)')
 grid on
 
 
-%% Plotting section
+%% ------------  Plotting section
 
 % --- d1 & stress amplitude vs Time
 figure('Name','d1 and Samp vs Time')
-plot(t_sync, d1, '.b', 'LineWidth', 1.5); % in kW/m3
-title(sprintf('d1 and Samp vs Time\n(Window Size: %0.0fs - %s)', windowDissipation, test_details));
+plot(tTheta, d1, '.b', 'LineWidth', 1.5); % in kW/m3
+title(sprintf('d1 and Samp vs Time\n(%0.0fs window) %s', windowDissipation, test_details));
 xlabel('Time (s)');
 ylabel('d1 - Sum of Heat Sources (kW/m^3)');
 yyaxis right;
-plot(t_sync, SampInterp, '-.r', LineWidth=2)
+plot(tTheta, SampInterp, '-.r', LineWidth=2)
 ylabel('Stress Amplitude (MPa)');
 legend('d1', '\sigma_{amp}','Location', 'northwest');
 grid on;
@@ -1531,7 +1420,7 @@ grid on;
 % ---- d1 and Avg. Theta vs stress amplitude
 figure('Name','d1 and Avg. Theta vs stress amplitude');
 plot(SampInterp, d1, '.b');
-title(sprintf('Sum of Heat Sources vs Samp\n(Window Size: %0.0fs - %s)', windowDissipation, test_details));
+title(sprintf('Sum of Heat Sources vs Samp\n(%0.0fs window) %s', windowDissipation, test_details));
 xlabel('\sigma_{amp} (MPa)');
 ylabel('d1 - Sum of Heat Sources (kW/m^3)');
 yyaxis right
@@ -1543,9 +1432,9 @@ grid on;
 % ---- D1 vs stress amplitude
 figure('Name','D1 and Avg. Theta vs stress amplitude');
 plot(SampInterp, D1, '.b');
-title(sprintf('Sum of Heat Sources / Cycle (D1) & Avg.theta vs Samp (Window Size: %0.0fs) - %s', windowDissipation, test_details));
+title(sprintf('Sum of Heat Sources / Cycle (D1) & Avg.theta vs Samp (%.0fs window) %s', windowDissipation, test_details));
 xlabel('\sigma_{amp} (MPa)');
-ylabel('D1 - Sum of Heat Sources / Cycle (kJ/m³/cycle)');
+ylabel('D1 - Sum of Heat Sources / Cycle (kJ·m^{-3}/cycle)');
 yyaxis right
 plot(SampInterp, movmean_theta,'r', LineWidth=2)
 ylabel('\theta (K)')
@@ -1561,19 +1450,19 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 figure('Name','D1 and diff(Avg.Theta) vs stress amplitude');
 plot((SampInterp(2:end)), diff(movmean_theta),'-r', LineWidth=1)
 ylabel('diff (Avg.\theta)  (K)')
-title(sprintf('Sum of Heat Sources / Cycle (D1) & theta vs Samp\n(Window Size: %0.0fs) - %s', windowDissipation, test_details));
+title(sprintf('Sum of Heat Sources / Cycle (D1) & theta vs Samp\n(%.0fs window) %s', windowDissipation, test_details));
 xlabel('\sigma_{amp} (MPa)');
 yyaxis right
 plot(SampInterp, D1, '.b');
 ax = gca;
 ax.YAxis(2).Color = 'b';
-ylabel('D1 - Sum of Heat Sources / Cycle (kJ/m³)');
+ylabel('D1 - Sum of Heat Sources / Cycle (kJ/m^3/cycle)');
 legend('diff (Avg.\theta)','D1','Location','northwest')
 grid on;
 
-%% d1 calculated from detrended OR Self Heating part of theta
+%% ----------  d1 calculated from detrended OR Self Heating part of theta
 
-% theta_ThermoElastic = detrend(theta,5);
+% theta_ThermoElastic = detrend(theta,6);
 % theta_SelfHeating = theta - theta_ThermoElastic; % theta_d1 = theta from only mechanical dissipation (d1)
 %
 % figure('Name','Theta, Thermoelastic, and Self Heating vs Samp');
@@ -1635,7 +1524,7 @@ grid on;
 % ax = gca;
 % ax.YAxis(2).Color = 'b';
 % xlabel('\sigma_{amp} (MPa)')
-% ylabel('D1-SelfHeating   (kJ/m³)')
+% ylabel('D1-SelfHeating   (kJ/m^3/cycle)')
 % legend('\theta','\theta_{SelfHeating}','D1_{SelfHeating}  ','Location', 'northwest');
 
 % figure('Name','d1 vs d1-theta-selfheating')
@@ -1648,61 +1537,448 @@ grid on;
 % ylabel('d1 (kW/m³)')
 % legend ('d1','d1_{SelfHeating}')
 
-%% Frequency Analysis of Theta of Loading Period
-N_thetaLoading = length(thetaSync);
-f = (0:floor(N_thetaLoading/2)) * (SF / N_thetaLoading);
 
-% FFT computation
-P1 = abs(fft(thetaSync,N_thetaLoading)) * (2/N_thetaLoading);
-P1 = P1(1 : floor(N_thetaLoading/2)+1);
-P1(1) = NaN; % Remove DC component
+%% ----------- T0D: Spectral Analysis of Whole IR Data
+% Gage zone, Top and Bottom legs
+% close all
+N_IR = length(IRtime);
 
-figure('Name', 'Amplitude Spectrum');
-plot(f, log(P1), '.r', 'MarkerSize', 5, DisplayName='theta-loading'); hold on;
-title('\theta (loading) Single-Sided Amplitude Spectrum (DC Removed)', test_details);
-xlabel('Frequency (Hz)');
-xticks(0:LF:ceil(SF/2/100)*100)
-ylabel('Amplitude (log)');
-grid on;
-legend
+N_IRTrunc = N_IR; % Finding the maximum length of data which has integer number of cycles
 
-N_thetaLoadingTrunc = N_thetaLoading;
-while mod(N_thetaLoadingTrunc, SF/LF) >= 1e-9
-    N_thetaLoadingTrunc = N_thetaLoadingTrunc -1;
+while mod(N_IRTrunc, SF/LF) >= 1e-9
+    N_IRTrunc = N_IRTrunc -1;
 end
 
-Ndiff = N_thetaLoading - N_thetaLoadingTrunc;
-thetaTruncIdx = flip(N_thetaLoading:-1:Ndiff-1);
+% --- Ensure column vectors
+T0D = T0D(:);
+T_ref_up = T_ref_up(:);
+T_ref_bottom = T_ref_bottom(:);
 
-thetaTrunc = thetaSync(thetaTruncIdx);
+% --- Truncate to consistent length
+T0D = T0D(1:N_IRTrunc);
+T_ref_up = T_ref_up(1:N_IRTrunc);
+T_ref_bottom = T_ref_bottom(1:N_IRTrunc);
 
-fTrunc = (0:floor(N_thetaLoadingTrunc/2)) * (SF / N_thetaLoadingTrunc);
+% --- Hann window
+applyHANN = hann(N_IRTrunc);
+applyHANN = applyHANN(:);
+CG = mean(applyHANN);
 
-% FFT computation
-P1Trunc = abs(fft(thetaTrunc,N_thetaLoadingTrunc)) * (2/N_thetaLoadingTrunc);
-P1Trunc = P1Trunc(1 : floor(N_thetaLoadingTrunc/2)+1);
-P1Trunc(1) = NaN; % Remove DC component
+% --- Frequency vector
+f_whole = (0:floor(N_IRTrunc/2)) * (SF / N_IRTrunc);
+f_whole = f_whole(:);
 
-hold on
-plot(fTrunc, log(P1Trunc), '.b', 'MarkerSize', 5, DisplayName='theta-loading truncated');
+% --------- FFT computation T0D
+T0D_HANN = T0D .* applyHANN;
+P1T0D = abs(fft(T0D_HANN, N_IRTrunc)) * (2/(N_IRTrunc * CG));
+P1T0D = P1T0D(1 : floor(N_IRTrunc/2)+1);
+P1T0D(1) = NaN;
+
+% --------- FFT computation T_ref_up
+T_ref_up_HANN = T_ref_up .* applyHANN;
+P1Up = abs(fft(T_ref_up_HANN, N_IRTrunc)) * (2/(N_IRTrunc * CG));
+P1Up = P1Up(1 : floor(N_IRTrunc/2)+1);
+P1Up(1) = NaN;
+
+% ----------- FFT computation T_ref_bottom
+T_ref_bottom_HANN = T_ref_bottom .* applyHANN;
+P1bot = abs(fft(T_ref_bottom_HANN, N_IRTrunc)) * (2/(N_IRTrunc * CG));
+P1bot = P1bot(1 : floor(N_IRTrunc/2)+1);
+P1bot(1) = NaN;
+
+figure('Name', 'Frequency analysis whole IR data');
+title('Frequency analysis whole IR data')
+hold on;
+
+% Harmonic markers
+xline(20,'--k','1f','FontSize',22);
+xline(40,'--k','2f','FontSize',22);
+xline(60,'--k','3f','FontSize',22);
+
+h = plot(f_whole, movmean(P1T0D,3), 'or', 'MarkerSize', 2, 'DisplayName','T_{GZ}');
+set(h, 'MarkerFaceColor', h.Color);
+h = plot(f_whole, movmean(P1bot,3), 'og', 'MarkerSize', 2, 'DisplayName','T_{RefLow}');
+set(h, 'MarkerFaceColor', h.Color);
+h = plot(f_whole, movmean(P1Up,3),  'ob', 'MarkerSize', 2, 'DisplayName','T_{RefUp}');
+set(h, 'MarkerFaceColor', h.Color);
+
+
+xlabel('Frequency (Hz)');
+ylabel('Amplitude');
+
+xlim([0 70])
+xticks(0:10:70)
+
+set(gca, 'YScale', 'log');
+ylim([1e-6 1e-1])
+yticks([1e-6 1e-5 1e-4 1e-3 1e-2 1e-1])
+yticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}'})
+
+% Grid
+grid on;
+ax = gca;
+ax.YMinorGrid = 'on';
+ax.GridAlpha = 0.5;
+ax.MinorGridAlpha = 0.3;
+set(gca, 'FontSize', 20)          % Axes tick labels
+    xlabel('Frequency (Hz)', 'FontSize', 20)
+    ylabel('Amplitude', 'FontSize', 20)
+pos = [300   300   657   480];  %[left  bottom  width  height]
+set(gcf, 'Position', pos);
+box on
+ax = gca;
+ax.GridAlpha = 0.8;
+legend
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% ------------- T0D: Spectral Analysis During Fatigue
+
+N_IRfatigue = length(theta);
+
+N_IRfatigueTrunc = N_IRfatigue; % Finding the maximum length of data which has integer number of cycles
+
+while abs(mod(N_IRfatigueTrunc, SF / LF)) > 1e-6
+    N_IRfatigueTrunc = N_IRfatigueTrunc -1;
+end
+
+% --------- Frequency vector
+f_fatigue = (0:floor(N_IRfatigueTrunc/2)) * (SF / N_IRfatigueTrunc);
+f_fatigue = f_fatigue(:);
+
+TrefUp_fatigueTrunc = T_ref_up_fatigue(1:N_IRfatigueTrunc); 
+TrefUp_fatigueTrunc = TrefUp_fatigueTrunc(:);
+
+TrefBot_fatigueTrunc = T_ref_bottom_fatigue(1:N_IRfatigueTrunc); 
+TrefBot_fatigueTrunc = TrefBot_fatigueTrunc(:);
+
+T0D_fatigueTrunc = T0D_fatigue(1:N_IRfatigueTrunc); 
+T0D_fatigueTrunc = T0D_fatigueTrunc(:);
+
+thetaTrunc = theta(1:N_IRfatigueTrunc); 
+thetaTrunc = thetaTrunc(:);
+
+% --------- Apply Hann window
+applyHANN_fatigue = hann(N_IRfatigueTrunc);
+applyHANN_fatigue = applyHANN_fatigue(:);
+
+CG_fatigue = mean(applyHANN_fatigue); % Coherent gain
+
+TrefUp_fatigueHANN = TrefUp_fatigueTrunc.* applyHANN_fatigue;
+TrefBot_fatigueHANN = TrefBot_fatigueTrunc.* applyHANN_fatigue;
+T0DC_fatigueHANN = T0D_fatigueTrunc.* applyHANN_fatigue;
+thetaC_HANN = thetaTrunc.* applyHANN_fatigue;
+
+
+% --------- FFT computation TrefUp_fatigue
+P1TrefUp_fatigue = abs(fft(TrefUp_fatigueHANN, N_IRfatigueTrunc)) * (2/(N_IRfatigueTrunc * CG_fatigue));
+P1TrefUp_fatigue = P1TrefUp_fatigue(1 : floor(N_IRfatigueTrunc/2)+1);
+P1TrefUp_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation TrefBot_fatigue
+P1TrefBot_fatigue = abs(fft(TrefBot_fatigueHANN, N_IRfatigueTrunc)) * (2/(N_IRfatigueTrunc * CG_fatigue));
+P1TrefBot_fatigue = P1TrefBot_fatigue(1 : floor(N_IRfatigueTrunc/2)+1);
+P1TrefBot_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation T0DC
+P1T0DC_fatigue = abs(fft(T0DC_fatigueHANN, N_IRfatigueTrunc)) * (2/(N_IRfatigueTrunc * CG_fatigue));
+P1T0DC_fatigue = P1T0DC_fatigue(1 : floor(N_IRfatigueTrunc/2)+1);
+P1T0DC_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation thetaC
+P1thetaC = abs(fft(thetaC_HANN, N_IRfatigueTrunc)) * (2/(N_IRfatigueTrunc * CG_fatigue));
+P1thetaC = P1thetaC(1 : floor(N_IRfatigueTrunc/2)+1);
+P1thetaC(1) = NaN; % Remove DC component
+
+figure('Name', 'Frequency analysis IR data FATIGUE (log scale)'); hold on
+title(sprintf('Frequency analysis IR data FATIGUE (log scale) - %s', test_details));
+
+% Harmonic markers
+xline(20,'--k','1f','FontSize',22);
+xline(40,'--k','2f','FontSize',22);
+xline(60,'--k','3f','FontSize',22);
+
+h = plot(f_fatigue, movmean(P1TrefUp_fatigue,3),'o', 'Color', 'b', 'MarkerSize', 3); 
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(f_fatigue, movmean(P1TrefBot_fatigue,3),'o', 'Color', 'g', 'MarkerSize', 3);
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(f_fatigue, movmean(P1T0DC_fatigue,3),'o', 'Color', 'r', 'MarkerSize', 3);
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(f_fatigue, movmean(P1thetaC,3),'o', 'Color', 'k', 'MarkerSize', 3);
+set(h, 'MarkerFaceColor', h.Color);    
+
+xlabel('Frequency (Hz)', 'FontSize', 20)
+ylabel('Amplitude', 'FontSize', 20)
+
+set(gca, 'YScale', 'log');
+ylim([1e-6 1e-0])
+yticks([1e-6 1e-5 1e-4 1e-3 1e-2 1e-1 1e0])
+yticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}','10^{0}'})
+
+xlim([0 70])
+xticks(0:10:ceil(SF/2/100)*100)
+
+grid on;
+ax = gca;
+ax.YMinorGrid = 'on';
+ax.GridAlpha = 0.5;
+ax.MinorGridAlpha = 0.3;
+
+set(gcf, 'Position', [688 535 657 400])
+set(gca, 'FontSize', 20)
+
+% legend
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+%% -------- T0D: FFT BEFORE pre-training tension and before fatigue loading
+% close all
+
+% Although the index length correction is not necessary for the BEFORE
+% data, however, I am still performing it for the purpose of concistency.
+% Since, I will be subtracting the BEFORE amplitudes from the Fatigue
+% amplitudes, therefore, I think it is safe to have index length which
+% satisfies the integer number of cycles criteria even for the BEFORE data.
+
+N_IRBefore = length(1:BeforeLoad_IdxEnd);
+
+N_IRBeforeTrunc = N_IRBefore; % Finding the maximum length of data which has integer number of cycles
+
+while mod(N_IRBeforeTrunc, SF/LF) >= 1e-6
+    N_IRBeforeTrunc = N_IRBeforeTrunc -1;
+end
+
+applyHANN = hann(N_IRBeforeTrunc);
+applyHANN = applyHANN(:);
+CG_BEFORE = mean(applyHANN); % --- Coherent gain correction
+
+T0D_BeforeHANN = T0D(1:N_IRBeforeTrunc).* applyHANN;
+T_ref_up_BeforeHANN = T_ref_up(1:N_IRBeforeTrunc).* applyHANN;
+T_ref_bot_BeforeHANN = T_ref_bottom(1:N_IRBeforeTrunc).* applyHANN;
+
+T_ref_Before = 0.5 * (T_ref_up_BeforeHANN + T_ref_bot_BeforeHANN);
+TnoOffset_Before = T0D_BeforeHANN - T_ref_Before;
+Ti_Before = mean(TnoOffset_Before(1 : SF*2)); % data of initial 2 seconds
+theta_Before = TnoOffset_Before - Ti_Before;
+theta_Before = theta_Before(:);
+theta_BeforeHANN = theta_Before; % already HANN windowed implicitly
+
+f_Before = (0:floor(N_IRBeforeTrunc/2)) * (SF / N_IRBeforeTrunc);
+f_Before = f_Before(:);
+
+% --------- FFT computation T0D
+P1T0D_Before = abs(fft(T0D_BeforeHANN, N_IRBeforeTrunc)) * (2/(N_IRBeforeTrunc * CG_BEFORE));
+P1T0D_Before = P1T0D_Before(1 : floor(N_IRBeforeTrunc/2)+1);
+P1T0D_Before(1) = NaN; % Remove DC component
+
+% --------- FFT computation T_ref_up
+P1UpBefore = abs(fft(T_ref_up_BeforeHANN, N_IRBeforeTrunc)) * (2/(N_IRBeforeTrunc * CG_BEFORE));
+P1UpBefore = P1UpBefore(1 : floor(N_IRBeforeTrunc/2)+1);
+P1UpBefore(1) = NaN; % Remove DC component
+
+% ----------- FFT computation T_ref_bottom
+P1botBefore = abs(fft(T_ref_bot_BeforeHANN, N_IRBeforeTrunc)) * (2/(N_IRBeforeTrunc * CG_BEFORE));
+P1botBefore = P1botBefore(1 : floor(N_IRBeforeTrunc/2)+1);
+P1botBefore(1) = NaN; % Remove DC component
+
+% ----------- FFT computation theta_Before
+P1thetaBefore = abs(fft(theta_BeforeHANN, N_IRBeforeTrunc)) * (2/(N_IRBeforeTrunc * CG_BEFORE));
+P1thetaBefore = P1thetaBefore(1 : floor(N_IRBeforeTrunc/2)+1);
+P1thetaBefore(1) = NaN; % Remove DC component
+
+% ------------ Plot (log scale)
+figure('Name', 'Frequency analysis IR data BEFORE fatigue (log scale)'); hold on
+title(sprintf('Frequency analysis IR data BEFORE fatigue (log scale)- %s', test_details));
+% Harmonic markers
+xline(20,'--k','1f','FontSize',22);
+xline(40,'--k','2f','FontSize',22);
+xline(60,'--k','3f','FontSize',22);
+
+plot(f_Before, movmean(P1UpBefore,3), 'o', 'Color', 'b', 'MarkerSize', 3, ...
+    'MarkerFaceColor', 'b', 'MarkerEdgeColor', 'b', 'DisplayName', 'T_{RefUp}');
+
+plot(f_Before, movmean(P1botBefore,3), 'o', 'Color', 'g', 'MarkerSize', 3, ...
+    'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'g', 'DisplayName', 'T_{RefLow}');
+
+plot(f_Before, movmean(P1T0D_Before,3),'o', 'Color', 'r', 'MarkerSize', 3, ...
+    'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'DisplayName', 'T_{GZ}');
+
+% plot(f_Before, movmean(P1thetaBefore,3),'o', 'Color', 'k', 'MarkerSize', 3, ...
+%     'MarkerFaceColor', 'k', 'MarkerEdgeColor', 'k', 'DisplayName', '\theta');
+
+xlabel('Frequency (Hz)');
+ylabel('Amplitude');
+xticks(0:10:ceil(SF/2/100)*100)
+xlim([0 70])
+
+set(gca, 'YScale', 'log');
+ylim([1e-5 1e-0])
+yticks([1e-5 1e-4 1e-3 1e-2 1e-1 1e0])
+yticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}','10^{0}'})
+
+grid on;
+ax = gca;
+ax.YMinorGrid = 'on';
+ax.GridAlpha = 0.8;
+ax.MinorGridAlpha = 0.3;
+pos = [300   300   657   480];  %[left  bottom  width  height]
+set(gcf, 'Position', pos);
+set(gca, 'FontSize', 20)          % Axes tick labels
+    xlabel('Frequency (Hz)', 'FontSize', 20)
+    ylabel('Amplitude', 'FontSize', 20)
+
+box on
+
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscore
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+
+%% -------------- T0D: Spectral Analysis AFTER Fatigue
+% close all
+offset = 500;
+
+T0D_After = T0D(temp_idxE+offset:end);
+T_ref_bottom_After = T_ref_bottom(temp_idxE+offset:end);
+T_ref_up_After = T_ref_up(temp_idxE+offset:end);
+
+T0D_After = T0D_After(:);
+T_ref_bottom_After = T_ref_bottom_After(:);
+T_ref_up_After = T_ref_up_After(:);
+
+N_IR_After = length(T0D_After);
+
+N_IR_AfterTrunc = N_IR_After; % Finding the maximum length of data which has integer number of cycles
+
+while mod(N_IR_AfterTrunc, SF/LF) >= 1e-6
+    N_IR_AfterTrunc = N_IR_AfterTrunc -1;
+end
+
+applyHANN_After = hann(N_IR_AfterTrunc);
+applyHANN_After = applyHANN_After(:);
+
+CG_After = mean(applyHANN_After); % --- Coherent gain correction
+
+f_After = (0:floor(N_IR_AfterTrunc/2)) * (SF / N_IR_AfterTrunc);
+f_After = f_After(:);
+
+% --------- Apply Hann window (time-domain)
+T0D_AfterHANN = T0D_After(1:N_IR_AfterTrunc) .* applyHANN_After;
+T_ref_up_AfterHANN = T_ref_up_After(1:N_IR_AfterTrunc) .* applyHANN_After;
+T_ref_bottom_AfterHANN = T_ref_bottom_After(1:N_IR_AfterTrunc) .* applyHANN_After;
+
+% --------- FFT computation T0D
+P1T0D_After = abs(fft(T0D_AfterHANN, N_IR_AfterTrunc)) * (2/(N_IR_AfterTrunc * CG_After));
+P1T0D_After = P1T0D_After(1 : floor(N_IR_AfterTrunc/2)+1);
+P1T0D_After(1) = NaN; % Remove DC component
+
+% --------- FFT computation T_ref_up
+P1UpAfter = abs(fft(T_ref_up_AfterHANN, N_IR_AfterTrunc)) * (2/(N_IR_AfterTrunc * CG_After));
+P1UpAfter = P1UpAfter(1 : floor(N_IR_AfterTrunc/2)+1);
+P1UpAfter(1) = NaN; % Remove DC component
+
+% ----------- FFT computation T_ref_bottom
+P1botAfter = abs(fft(T_ref_bottom_AfterHANN, N_IR_AfterTrunc)) * (2/(N_IR_AfterTrunc * CG_After));
+P1botAfter = P1botAfter(1 : floor(N_IR_AfterTrunc/2)+1);
+P1botAfter(1) = NaN; % Remove DC component
+
+% ------- Theta for AFTER
+T_ref_After = 0.5 * (T_ref_up_AfterHANN + T_ref_bottom_AfterHANN);
+TnoOffset_After = T0D_AfterHANN - T_ref_After;
+
+Ti_After = mean(TnoOffset_After(1:min(SF*2, length(TnoOffset_After))));
+theta_After = TnoOffset_After - Ti_After;
+theta_After = theta_After(:);
+
+P1thetaAfter = abs(fft(theta_After, N_IR_AfterTrunc)) * (2/(N_IR_AfterTrunc * CG_After));
+P1thetaAfter = P1thetaAfter(1 : floor(N_IR_AfterTrunc/2)+1);
+P1thetaAfter(1) = NaN;
+
+
+% ------------ Plot After Fatigue loading (log scale)
+figure('Name', 'Frequency analysis IR data AFTER fatigue (log scale)'); hold on
+title(sprintf('Frequency analysis IR data AFTER fatigue (log scale) - %s', test_details));
+
+% Harmonic markers
+xline(20,'--k','1f','FontSize',22);
+xline(40,'--k','2f','FontSize',22);
+xline(60,'--k','3f','FontSize',22);
+
+h = plot(f_After, movmean(P1UpAfter,3), 'o', 'Color', 'b', 'MarkerSize', 2);
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(f_After, movmean(P1botAfter,3), 'o', 'Color', 'g', 'MarkerSize', 2);
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(f_After, movmean(P1T0D_After,3),'o', 'Color', 'r', 'MarkerSize', 2);
+set(h, 'MarkerFaceColor', h.Color);
+
+% h = plot(f_After, movmean(P1thetaAfter,3),'o', 'Color', 'k', 'MarkerSize', 2);
+% set(h, 'MarkerFaceColor', h.Color);
+
+
+
+xticks(0:10:ceil(SF/2/100)*100)
+xlim([0 70])
+
+set(gca, 'YScale', 'log');
+ylim([1e-5 1e-0])
+yticks([1e-5 1e-4 1e-3 1e-2 1e-1 1e0])
+yticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}','10^{0}'})
+
+grid on;
+ax = gca;
+ax.YMinorGrid = 'on';
+ax.GridAlpha = 0.8;
+ax.MinorGridAlpha = 0.3;
+pos = [300   300   657   480];  %[left  bottom  width  height]
+set(gcf, 'Position', pos);
+set(gca, 'FontSize', 20)          % Axes tick labels
+    xlabel('Frequency (Hz)', 'FontSize', 20)
+    ylabel('Amplitude', 'FontSize', 20)
+box on
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.svg']));
 
 %% FFT on sliding windows
 
-N_theta = length(thetaSync);
+N_theta = length(theta);
 SFnewTSA = round(SF * windowTSA);
 
 if mod(SFnewTSA, SF/LF) >= 1e-9
     error('window size is not producing integer number of cycles!!!')
 end
 
-FL2 = 2*LF;                % 2nd harmonic [Hz]
-FL3 = 3*LF;                % 3rd harmonic [Hz]
+LF2 = 2*LF;                % 2nd harmonic [Hz]
+LF3 = 3*LF;                % 3rd harmonic [Hz]
 
 % Aliasing check
-if FL3 > SF/2
+if LF3 > SF/2
     warning(['\n################################\n' ...
         'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
-        '################################'], FL3, SF/2);
+        '################################'], LF3, SF/2);
 end
 
 % --- Arbitrary frequencies ---
@@ -1716,37 +1992,37 @@ arbitraryFreqs = [fA, fB, fC, fD, fE, fF];
 
 % --- FFT frequency axis ---
 f = (0:SFnewTSA-1) * (SF/SFnewTSA);
-nWin = N_theta - SFnewTSA + 1; % # of windows in the whole theta vector
+nWinTheta = N_theta - SFnewTSA + 1; % # of windows in the whole theta vector
 
 % --- Preallocate ---
-maxAmpH1 = nan(nWin,1); maxFreqH1 = nan(nWin,1); ampAtH1 = nan(nWin,1);
-maxAmpH2 = nan(nWin,1); maxFreqH2 = nan(nWin,1); ampAtH2 = nan(nWin,1);
-maxAmpH3 = nan(nWin,1); maxFreqH3 = nan(nWin,1); ampAtH3 = nan(nWin,1);
-ampAtArbit = nan(nWin, length(arbitraryFreqs));
+maxAmpH1 = nan(nWinTheta,1); maxFreqH1 = nan(nWinTheta,1); ampAtH1 = nan(nWinTheta,1);
+maxAmpH2 = nan(nWinTheta,1); maxFreqH2 = nan(nWinTheta,1); ampAtH2 = nan(nWinTheta,1);
+maxAmpH3 = nan(nWinTheta,1); maxFreqH3 = nan(nWinTheta,1); ampAtH3 = nan(nWinTheta,1);
+ampAtArbit = nan(nWinTheta, length(arbitraryFreqs));
 
 
 %% --- Sliding window --- FFT method
 
-for k = 1:nWin
+for k = 1:nWinTheta
 
     end_idx = k+SFnewTSA-1;
-    segment = detrend(thetaSync(k : end_idx), 4);
+    segmentTheta = detrend(theta(k : end_idx), 6);
     % segment = detrend(theta(k : end_idx), 1);
     % segment = theta(k : end_idx);
-    beta = abs(fft(segment)) * (2/SFnewTSA);
+    beta = abs(fft(segmentTheta)) * (2/SFnewTSA);
 
     idx1 = find(f >= (LF-BW) & f <= (LF+BW));
     [maxAmpH1(k), j1] = max(beta(idx1)); maxFreqH1(k) = f(idx1(j1));
     [~, i1] = min(abs(f - LF)); ampAtH1(k) = beta(i1);
 
-    idx2 = find(f >= (FL2-BW) & f <= (FL2+BW));
+    idx2 = find(f >= (LF2-BW) & f <= (LF2+BW));
     [maxAmpH2(k), j2] = max(beta(idx2)); maxFreqH2(k) = f(idx2(j2));
-    [~, i2] = min(abs(f - FL2)); ampAtH2(k) = beta(i2);
+    [~, i2] = min(abs(f - LF2)); ampAtH2(k) = beta(i2);
 
-    if FL3<SF/2
-        idx3 = find(f >= (FL3-BW) & f <= (FL3+BW));
+    if LF3<SF/2
+        idx3 = find(f >= (LF3-BW) & f <= (LF3+BW));
         [maxAmpH3(k), j3] = max(beta(idx3)); maxFreqH3(k) = f(idx3(j3));
-        [~, i3] = min(abs(f - FL3)); ampAtH3(k) = beta(i3);
+        [~, i3] = min(abs(f - LF3)); ampAtH3(k) = beta(i3);
     end
 
     for j = 1:length(arbitraryFreqs)
@@ -1757,22 +2033,22 @@ for k = 1:nWin
 end
 
 % --- Construct central time reference for overlaying theta ---
-winCentreIdx = (1:nWin) + floor(SFnewTSA/2);
+winCentreIdx = (1:nWinTheta) + floor(SFnewTSA/2);
 
 %% --- Amplitude Plotting FFT method (with theta on yyaxis right) ---
 nn = 3;
-if FL3>SF/2
+if LF3>SF/2
     nn = 2;
 end
 
 figure('Name','Harmonic Amplitudes with Theta');%);%,'NumberTitle','off');
 % Define time vector for x-axis
 
-tplot = t_sync(1:nWin);
+tplot = tTheta(1:nWinTheta);
 
 % loading window
-loading_start = t_sync(1);%(idx_Theta_sync(1));
-loading_end = t_sync(end); %(temp_idxE - SF*window);
+loading_start = tTheta(1);%(idx_Theta_sync(1));
+loading_end = tTheta(end); %(temp_idxE - SF*window);
 loading_window = find(tplot >= loading_start & tplot <= loading_end);
 
 subplot(nn,2,1);
@@ -1781,7 +2057,7 @@ plot(tplot, ampAtH1, 'k', 'LineWidth', 2);
 ylabel('Amp (K)');
 title(sprintf('Amp @ %.f Hz', LF)); grid on;
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('Time (s)')
 legend('Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1792,7 +2068,7 @@ plot(tplot, maxAmpH1, 'b', 'LineWidth', 2);
 ylabel('Amp (K)');
 title(sprintf('Max Amp %.f\\pm%.1f Hz', LF, BW)); grid on;
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('Time (s)')
 legend('Amp','Avg. \theta','Location', 'northwest');
 
@@ -1803,9 +2079,9 @@ plot(tplot, ampAtH2, 'g', 'LineWidth', 2);
 hold on;
 plot(tplot, movmean(ampAtH2, SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)');
-title(sprintf('Amp @ %.f Hz', FL2)); grid on;
+title(sprintf('Amp @ %.f Hz', LF2)); grid on;
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('Time (s)')
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1815,22 +2091,22 @@ yyaxis left
 plot(tplot, maxAmpH2, 'm', 'LineWidth', 2);
 hold on; plot(tplot, movmean(maxAmpH2, SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)');
-title(sprintf('Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
+title(sprintf('Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('Time (s)')
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,2,5);
     yyaxis left
     plot(tplot, ampAtH3, 'y', 'LineWidth', 2);
     hold on; plot(tplot, movmean(ampAtH3, SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
     ylabel('Amp (K)');
-    title(sprintf('Amp @ %.f Hz', FL3)); grid on;
+    title(sprintf('Amp @ %.f Hz', LF3)); grid on;
     yyaxis right
-    plot(tplot, movmean(thetaSync(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, movmean(theta(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('Time (s)')
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1841,24 +2117,30 @@ if FL3<SF/2
     plot(tplot, maxAmpH3, 'c', 'LineWidth', 2);
     hold on; plot(tplot, movmean(maxAmpH3, SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
     ylabel('Amp (K)');
-    title(sprintf('Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
+    title(sprintf('Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
     yyaxis right
-    plot(tplot, movmean(thetaSync(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, movmean(theta(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('Time (s)')
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowTSA,test_details));
+sg = sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n(mean \\theta removed) - %s', windowTSA, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-% -- Harmonic Amplitudes vs Stress amplitude
-SampInterp_x = SampInterp(1:nWin);
+
+
+% ------------------------ Harmonic Amplitudes vs Stress amplitude
+SampInterp_x = SampInterp(1:nWinTheta);
 
 figure('Name','Harmonic Amplitudes vs Stress Amp');%);%,'NumberTitle','off');
 
@@ -1868,7 +2150,7 @@ plot(SampInterp_x, ampAtH1(loading_window), 'k', 'LineWidth', 2);
 ylabel('Amp (K)');
 title(sprintf('Amp @ %.f Hz', LF)); grid on;
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1879,7 +2161,7 @@ plot(SampInterp_x, maxAmpH1(loading_window), 'b', 'LineWidth', 2);
 ylabel('Amp (K)');
 title(sprintf('Max Amp %.f\\pm%.1f Hz', LF, BW)); grid on;
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp','Avg. \theta','Location', 'northwest');
 
@@ -1890,9 +2172,9 @@ plot(SampInterp_x, ampAtH2(loading_window), 'g', 'LineWidth', 2);
 hold on;
 plot(SampInterp_x, movmean(ampAtH2(loading_window), SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)');
-title(sprintf('Amp @ %.f Hz', FL2)); grid on;
+title(sprintf('Amp @ %.f Hz', LF2)); grid on;
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1902,22 +2184,22 @@ yyaxis left
 plot(SampInterp_x, maxAmpH2(loading_window), 'm', 'LineWidth', 2);
 hold on; plot(SampInterp_x, movmean(maxAmpH2(loading_window), SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)');
-title(sprintf('Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
+title(sprintf('Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,2,5);
     yyaxis left
     plot(SampInterp_x, ampAtH3(loading_window), 'y', 'LineWidth', 2);
     hold on; plot(SampInterp_x, movmean(ampAtH3(loading_window), SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
     ylabel('Amp (K)');
-    title(sprintf('Amp @ %.f Hz', FL3 )); grid on;
+    title(sprintf('Amp @ %.f Hz', LF3 )); grid on;
     yyaxis right
-    plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('\sigma_{amp} (MPa)');
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
@@ -1928,21 +2210,26 @@ if FL3<SF/2
     plot(SampInterp_x, maxAmpH3(loading_window), 'c', 'LineWidth', 2);
     hold on; plot(SampInterp_x, movmean(maxAmpH3(loading_window), SFnewDissipation, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
     ylabel('Amp (K)');
-    title(sprintf('Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
+    title(sprintf('Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
     yyaxis right
-    plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('\sigma_{amp} (MPa)');
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowTSA,test_details));
+sg = sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n(mean \\theta removed) - %s', windowTSA, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
 
 %% --- Arbitrary Frequencies with Theta Overlay ---
 figure('Name','All Arbitrary Frequency Amplitudes with Theta');%);%,'NumberTitle','off');
@@ -1955,7 +2242,7 @@ for j = 1:length(arbitraryFreqs)
     title(sprintf('Amp @ %.2f Hz', arbitraryFreqs(j))); grid on;
 
     yyaxis right
-    plot(tplot, movmean(thetaSync(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
+    plot(tplot, movmean(theta(winCentreIdx), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
     ylabel('\theta (K)'); xlabel('Time (s)')
     legend('Amp','Avg. \theta','Location', 'northwest');
 end
@@ -1974,7 +2261,7 @@ for j = 1:length(arbitraryFreqs)
     title(sprintf('Amp @ %.2f Hz', arbitraryFreqs(j))); grid on;
 
     yyaxis right
-    plot(SampInterp_x, movmean(thetaSync(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
+    plot(SampInterp_x, movmean(theta(loading_window), SFnewDissipation, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
     ylabel('\theta (K)'); xlabel('\sigma_{amp} (MPa)');
     legend('Amp','Avg. \theta','Location', 'northwest');
 
@@ -1994,14 +2281,14 @@ xlabel('Time (s)'); grid on;
 
 subplot(nn,1,2);
 plot(tplot, maxFreqH2,'m','LineWidth',1.2);
-title(sprintf('Peak Freq in %.f\\pm%.1f Hz', FL2, BW));
+title(sprintf('Peak Freq in %.f\\pm%.1f Hz', LF2, BW));
 ylabel('Freq (Hz)');
 xlabel('Time (s)'); grid on;
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,1,3);
     plot(tplot, maxFreqH3,'c','LineWidth',1.2);
-    title(sprintf('Peak Freq in %.f\\pm%.1f Hz', FL3, BW));
+    title(sprintf('Peak Freq in %.f\\pm%.1f Hz', LF3, BW));
     ylabel('Freq (Hz)');
     xlabel('Time (s)'); grid on;
 end
@@ -2053,7 +2340,7 @@ Y2 = sin(2 * pi * 2*LF * tref_signal)';
 X3 = cos(2 * pi * 3*LF * tref_signal)';
 Y3 = sin(2 * pi * 3*LF * tref_signal)';
 
-for k = 1:nWin
+for k = 1:nWinTheta
 
     end_idx = k+SFnewTSA-1;
 
@@ -2061,21 +2348,21 @@ for k = 1:nWin
         break;
     end
 
-    segment = detrend(thetaSync(k : end_idx), 4); % - mean(theta(start_idx : end_idx)); Detrend removed the mean of theta
+    segmentC = detrend(theta(k : end_idx), 6); % - mean(theta(start_idx : end_idx)); Detrend removed the mean of theta
     % segment = detrend(theta(k : end_idx), 1);
     % segment = theta(k : end_idx);
 
 
-    H1_cos(k) = sum(segment .* X1(k : end_idx)) / ((SFnewTSA)/2);
-    H1_sin(k) = sum(segment .* Y1(k : end_idx)) / ((SFnewTSA)/2);
+    H1_cos(k) = sum(segmentC .* X1(k : end_idx)) / ((SFnewTSA)/2);
+    H1_sin(k) = sum(segmentC .* Y1(k : end_idx)) / ((SFnewTSA)/2);
 
-    H2_cos(k) = sum(segment .* X2(k : end_idx)) / ((SFnewTSA)/2);
-    H2_sin(k) = sum(segment .* Y2(k : end_idx)) / ((SFnewTSA)/2);
+    H2_cos(k) = sum(segmentC .* X2(k : end_idx)) / ((SFnewTSA)/2);
+    H2_sin(k) = sum(segmentC .* Y2(k : end_idx)) / ((SFnewTSA)/2);
 
-    H3_cos(k) = sum(segment .* X3(k : end_idx)) / ((SFnewTSA)/2);
-    H3_sin(k) = sum(segment .* Y3(k : end_idx)) / ((SFnewTSA)/2);
+    H3_cos(k) = sum(segmentC .* X3(k : end_idx)) / ((SFnewTSA)/2);
+    H3_sin(k) = sum(segmentC .* Y3(k : end_idx)) / ((SFnewTSA)/2);
 
-    % T_mean(k) = mean(T_0D_segment);
+    % T_mean(k) = mean(T0D_segment);
     AmpH1_window(k) = sqrt(H1_sin(k)^2 + H1_cos(k)^2);
     AmpH2_window(k) = sqrt(H2_sin(k)^2 + H2_cos(k)^2);
     AmpH3_window(k) = sqrt(H3_sin(k)^2 + H3_cos(k)^2);
@@ -2084,7 +2371,7 @@ end
 % --- plots
 
 % tplot = tTheta_sync(winCentreIdx);
-tplot = t_sync(1:nWin);
+tplot = tTheta(1:nWinTheta);
 % Combined figure with three subplots for H1, H2, H3 amplitudes
 figure('Name','Harmonic Amplitudes');%);%,'NumberTitle','off');
 
@@ -2094,44 +2381,51 @@ plot(tplot, AmpH1_window, LineWidth=2); grid on; title(sprintf('H1 Amplitude at 
 % plot(tplot, movmean(AmpH1_window, smoothing, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)'); xlabel('Time (s)');
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 ylabel('\theta (K)');
 % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
 legend('Amp','Avg. \theta','Location', 'northwest');
 
 subplot(nn,1,2);
-plot(tplot, AmpH2_window); grid on; title(sprintf('H2 Amplitude at %.f Hz', FL2));
+plot(tplot, AmpH2_window); grid on; title(sprintf('H2 Amplitude at %.f Hz', LF2));
 hold on;
 plot(tplot, movmean(AmpH2_window, SFnewDissipation, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
 ylabel('Amp (K)'); xlabel('Time (s)');
 yyaxis right
-plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 ylabel('\theta (K)');
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,1,3);
-    plot(tplot, AmpH3_window); grid on; title(sprintf('H3 Amplitude at %.f Hz', FL3));
+    plot(tplot, AmpH3_window); grid on; 
+    title(sprintf('H3 Amplitude at %.f Hz', LF3));
     hold on;
     plot(tplot, movmean(AmpH3_window, SFnewDissipation, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
     ylabel('Amp (K)'); xlabel('Time (s)');
     yyaxis right
-    plot(tplot, movmean(thetaSync(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, movmean(theta(winCentreIdx),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     ylabel('\theta (K)');
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window Harmonic Analysis using Reference Signals\n(mean \\theta removed) - %s', windowTSA, test_details));
+sg = sgtitle(sprintf('%.1fs Sliding-Window Harmonic Analysis using Reference Signals\n(mean \\theta removed) - %s', windowTSA, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-% -- Harmonics vs stress amplitude
+
+% ------------------------------------- Harmonics vs stress amplitude
+
 % loading period in temperatue and tTemp: idx_Theta_sync(1):theta_idxE
 % so the time should statrt when time is => than the time value at
 % idx_Theta_sync(1) and ends at when the time value is =< theta_idxE.
@@ -2148,1025 +2442,128 @@ plot(SampInterp_x, AmpH1_loading, LineWidth=2); grid on; title(sprintf('H1 Ampli
 % plot(SampInterp, movmean(AmpH1_loading, smoothing, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
 ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 ylabel('\theta (K)');
 % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 legend('Amp', 'Avg. \theta','Location', 'northwest');
 
 
 subplot(nn,1,2);
-plot(SampInterp_x, AmpH2_loading); grid on; title(sprintf('H2 Amplitude at %.f Hz', FL2));
+plot(SampInterp_x, AmpH2_loading); grid on; title(sprintf('H2 Amplitude at %.f Hz', LF2));
 hold on;
 plot(SampInterp_x, movmean(AmpH2_loading, SFnewDissipation, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
 ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
 yyaxis right
-plot(SampInterp_x, movmean(thetaSync(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampInterp_x, movmean(theta(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 ylabel('\theta (K)');
 legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,1,3);
-    plot(SampInterp_x, AmpH3_loading); grid on; title(sprintf('H3 Amplitude at %.f Hz', FL3));
+    plot(SampInterp_x, AmpH3_loading); grid on; title(sprintf('H3 Amplitude at %.f Hz', LF3));
     hold on;
     plot(SampInterp_x, movmean(AmpH3_loading, SFnewDissipation, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
     ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
     yyaxis right
-    plot(SampInterp_x, movmean(thetaSync(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampInterp_x, movmean(theta(loading_window),SFnewDissipation,"Endpoints","fill"), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     ylabel('\theta (K)');
     legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
 
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window Harmonic Analysis using Reference Signals\n (mean \\theta removed - %s)', windowTSA,test_details));
+sg = sgtitle(sprintf('%.1fs Sliding-Window Harmonic Analysis using Reference Signals\n(mean \\theta removed) - %s', windowTSA, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-%% Continuous: Eliminating transient periods from Force and Theta
-% ##############################################################
-% ##############################################################
-% ##############################################################
-% ==============================================================
-% DETECT SEGMENT BOUNDARIES FROM LARGE DROPS IN TROUGHS
+%% T0D: Least Square Method
+clc
+tref_signal = tTheta(:);
+% tref_signal = (0:N_theta-1) / SF;
 
-F_Sync = F_Sync(:);
-thetaSync = thetaSync(:);
+% --------- Precompute Hann window (for weighted LS)
+applyHANN = hann(SFnewTSA);
+applyHANN = applyHANN(:);
+pOrder = 4;
+nWinTheta = N_theta - SFnewTSA + 1;
 
-[Fpk, Fpk_loc] = findpeaks(F_Sync,'MinPeakProminence', minProminence);         % local maxima
-[Ftr_raw, Ftr_loc] = findpeaks(-F_Sync,'MinPeakProminence', minProminence);    % raw minima (troughs)
-Ftr = -Ftr_raw;
+for k = 1:nWinTheta
 
-diffTroughs = abs(diff(Ftr));
-thresh = 0.2 * mean(abs(Ftr));     % you can tune this threshold
+    end_idx = k + SFnewTSA - 1;
 
-% indices within trough list
-idx_bad = find(diffTroughs > thresh);
-idx_bad = [idx_bad([true; diff(idx_bad) > 20])];
-idx_bad = idx_bad + 1;
-% convert to indices in F
-SegEndLocs = Ftr_loc(idx_bad);
-SegEndLocs = SegEndLocs(:);
-
-% last segment ends at final time
-SegEndLocs = [SegEndLocs; length(F_Sync)];
-
-N_segments = length(SegEndLocs);
-
-% ==============================================================
-% BUILD FORCE SEGMENTS:
-%    - segment end = last peak before the trough drop
-%    - segment start = next peak closest in amplitude to last peak
-% ==============================================================
-
-segment_starts = zeros(N_segments,1);
-segment_ends = zeros(N_segments,1);
-
-peakPtr = 1;   % pointer inside Fpk
-X = [];
-for s = 1:N_segments
-
-    % --------- END OF SEGMENT ----------
-    endIdx = SegEndLocs(s);
-
-    % peaks up to this end
-    peaks_before_end = Fpk_loc(Fpk_loc <= endIdx);
-    if isempty(peaks_before_end)
-        lastPeakIdx = endIdx;
-        lastPeakVal = F_Sync(endIdx);
-    else
-        lastPeakIdx = peaks_before_end(end);
-        lastPeakVal = F_Sync(lastPeakIdx);
-    end
-    segment_ends(s) = lastPeakIdx;
-
-    % --------- START OF NEXT SEGMENT ----------
-    if s == 1
-        segment_starts(s) = 1;  % first segment starts at the beginning
-    else
-        % candidate next 15 peaks (tune value if needed)
-        searchRange = peakPtr : min(peakPtr+0, length(Fpk_loc));
-
-        % why I am taking 0 in 'peakPtr+0'. The reason is when the force in each new segment
-        % is selected to be closest to the peak of the previous segment, the resulting force
-        % history becomes cleaner, as overshoots and undershoots are effectively removed.
-        % However, under this processing, the temperature signal exhibits a distinct step
-        % increase at the transition between segments. This behaviour is likely due to the
-        % fact that, during the original test, the step change in force and the associated
-        % over- and undershoots had already influenced the specimen’s thermal response.
-        % Consequently, when these force transients are removed from the force history but the
-        % corresponding temperature data are retained, the temperature signal reveals a clear
-        % step increase between segments. The temperature level in each new segment is higher
-        % than that of the preceding segment, with a distinct step separating them. In contrast,
-        % when only the transient period between segments is removed, while retaining the fatigue
-        % loading from the very start of a segment including the over- and undershoots in the
-        % force data, the temperature signal remains smoothly increasing, with no noticeable step
-        % change between segments.
-
-        candidates = Fpk(searchRange);
-
-        % select the peak whose amplitude is closest to previous last peak
-        % [~, idxMin] = min(abs(candidates - lastPeakVal));
-        [~, idxMin] = min(abs(candidates - X));
-        newStartPeak = searchRange(idxMin);
-
-        % start at one sample before that peak
-        % segment_starts(s) = max(Fpk_loc(newStartPeak) - 1, 1);
-        segment_starts(s) = Fpk_loc(newStartPeak + 0) + 1;
-        % Adding 1, or 2, or 3, so that the next point is not a peak, but a point going towards the trough.
-        % I see from Fsync_interp that it usually takes 1 or 2 or 3 data points after peak to match the normal force profile.
-        % 1 gives the best result
-
-        % peakPtr = newStartPeak;
-    end
-
-    % update pointer to locate peaks for next segment
-    peakPtr = find(Fpk_loc == lastPeakIdx, 1) + 1;
-
-    % segment_starts(s)
-    % segment_ends(s)
-    X = lastPeakVal;
-
-end
-
-% ==============================================================
-% BUILD FORCE + THETA SEGMENTS INTO ONE CONTINUOUS VECTOR
-
-Force_C = [];
-% theta_C = nan(2635,N_segments);
-theta_C = [];
-% my_theta_continuous = [];
-
-for s = 1:N_segments
-    idx = segment_starts(s) : segment_ends(s);
-    Force_C = [Force_C;      F_Sync(idx)];
-    theta_C = [theta_C;  thetaSync(idx)];
-    % theta_C(1:length(idx),s) = theta_sync_interp(idx);
-    % my_theta_continuous = [my_theta_continuous;  movmean(theta_sync_interp(idx),SFnew,'Endpoints','fill')];
-end
-
-theta_C = movmean(theta_C, movmeanFactor);
-
-% S = load('theta_C_corrected.mat');
-% theta_C = S.theta_C_corr;
-
-
-% ==============================================================
-% NEW TIME VECTOR STARTING AT 0
-
-dt = mode(diff(t_sync));
-t_C = (0:dt:(length(theta_C)-1)*dt).'; % both Force_C and theta_C have same length
-
-% ==============================================================
-% PLOT
-
-figure('Name','Continuous Segment Assembly')
-plot(t_C, Force_C, 'k')
-ylabel('Force (N)')
-hold on
-yyaxis right
-plot(t_C, theta_C, 'r')
-ylabel('\theta (K)')
-xlabel('Time (s)')
-title('Continuous Segments: Force–\theta')
-legend ('F continusou','\theta continuous', 'location','northwest')
-grid on
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-%% Continuous: Determining Force Peaks and Troughs for evaluating their slopes and finally calculating Force and Stress Amplitudes
-
-[FhighsC, locs_FhighsC] = findpeaks(Force_C, 'MinPeakProminence', minProminence);
-N = numel(Force_C);
-
-% --- Manual test for first point ---
-if Force_C(1) > Force_C(2)
-    FhighsC = [Force_C(1); FhighsC];
-    locs_FhighsC = [1; locs_FhighsC];
-end
-% --- Manual test for last point ---
-if Force_C(N) > Force_C(N-1)
-    FhighsC = [FhighsC; Force_C(N)];
-    locs_FhighsC = [locs_FhighsC; N];
-end
-time_FhighsC = t_C(locs_FhighsC);
-
-
-[FlowsC, locs_FlowsC] = findpeaks(-Force_C, 'MinPeakProminence', minProminence);
-FlowsC = -FlowsC;
-time_FlowsC = t_C(locs_FlowsC);
-
-% ---------
-figure('Name','Continuous: Force and Theta Synchronisation')
-plot(t_C,Force_C,'-k')
-title('Continuous: Force and \theta Synchronisation', test_details)
-hold on;
-plot(time_FhighsC,FhighsC,'.r')
-plot(time_FlowsC,FlowsC,'.b')
-xlabel('Time (s)');
-ylabel('Force [N]')
-yyaxis right
-plot(t_C, theta_C)
-ylabel('\theta (K)');
-legend('F-filtered','highs','lows','\theta','Location', 'northwest');
-grid on
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% ================================================================================
-% Calculating slope of high and low forces for the Stress amplitude calculation
-
-% Robust linear regression
-[bH, statsH] = robustfit(time_FhighsC(:), FhighsC(:));
-[bL, statsL] = robustfit(time_FlowsC(:),  FlowsC(:));
-
-% Extract slope/intercept to cleaner variables
-aH_C = bH(1);        % intercept
-mH_C = bH(2);        % slope
-
-aL_C = bL(1);
-mL_C = bL(2);
-
-% 2. Extract residuals
-resH = statsH.resid;
-resL = statsL.resid;
-
-% 3. Compute RMSE for overall discrepancy
-RMSE_H = round(sqrt(mean(resH)),2);
-RMSE_L = round(sqrt(mean(resL)),2);
-
-fprintf('RMSE (Highs): \xB1%.2f N\n', RMSE_H);
-fprintf('RMSE (Lows) : \xB1%.2f N\n', RMSE_L);
-
-% 4. Plot original data and fitted lines
-Fhigh_fitC = mH_C * t_C + aH_C; % y = mx + b; linear equation
-Flow_fitC = mL_C * t_C + aL_C;
-
-% Compute R² for both fits
-SS_res_H = sum((FhighsC - (aH_C + mH_C*time_FhighsC)));
-SS_tot_H = sum((FhighsC - mean(FhighsC)));
-R2_H = 1 - SS_res_H/SS_tot_H;
-
-SS_res_L = sum((FlowsC - (aL_C + mL_C*time_FlowsC)));
-SS_tot_L = sum((FlowsC - mean(FlowsC)));
-R2_L = 1 - SS_res_L/SS_tot_L;
-
-figure('Name', 'Continuous: Robust Linear Force Fits');
-hold on; grid on;
-
-% Plot data
-scatter(time_FhighsC, FhighsC, 40, 'r', 'filled');
-scatter(time_FlowsC,  FlowsC,  40, 'b', 'filled');
-
-% Plot fits
-plot(t_C, Fhigh_fitC, '-g', 'LineWidth', 2);
-plot(t_C, Flow_fitC,  '-m', 'LineWidth', 2);
-
-xlabel('Time');
-ylabel('Force');
-title('Continuous: Robust Linear Fits for F_{high} and F_{low}', test_details);
-
-legend('Fhighs data','Flows data','High fit','Low fit','Location', 'northwest');
-
-% Get axes limits
-ax = gca;
-xMin = ax.XLim(1);
-xMax = ax.XLim(2);
-yMin = ax.YLim(1);
-yMax = ax.YLim(2);
-
-% Offset for text slightly below the top
-yOffset = 0.25*(yMax - yMin);
-
-% Display fit equations below the legend box (northwest)
-text(xMin + 0.02*(xMax-xMin), yMax - yOffset, ...
-    sprintf('Fhighs = %.3f + %.3f*t   \n(R^2 = %.3f)', aH_C, mH_C, R2_H), ...
-    'Color','g','FontSize',12,'VerticalAlignment','top');
-
-text(xMin + 0.02*(xMax-xMin), yMax - 1.5*yOffset, ...
-    sprintf('Flows = %.3f + %.3f*t   \n(R^2 = %.3f)', aL_C, mL_C, R2_L), ...
-    'Color','m','FontSize',12,'VerticalAlignment','top');
-
-hold off;
-
-% --- Compute Force Amplitude ---
-Famp_fitC = (Fhigh_fitC - Flow_fitC)/2;
-
-% --- Compute Stress Amplitude ---
-SampC = Famp_fitC / xarea / 1e6;  % in MPa
-
-% --- Plot Force Amplitude ---
-% figure('Name','Continuous: Force and Stress Amplitudes');
-% plot(t_continuous, Famp_fitC, 'b', 'LineWidth', 2);
-% title('Continuous: Force and Stress Amplitudes vs Time', testName_withDate);
-% xlabel('Time (s)'); ylabel('Force Amplitude (N)');
-% grid on;
-%
-% yyaxis right
-% plot(t_continuous, SampC, 'r', 'LineWidth', 2); grid on;
-% ylabel('Stress Amplitude (MPa)');
-% legend('Famp','Samp')
-
-%--- Plot Fit Forces ---
-figure('Name','Continuous: Force vs Time');
-hold on; grid on;
-plot(t_C, Fhigh_fitC, '-r', 'LineWidth', 2);
-plot(t_C, Flow_fitC,  '-b', 'LineWidth', 2);
-plot(t_C, Famp_fitC, '-k', 'LineWidth', 2);          % amplitude fit
-xlabel('Time (s)'); ylabel('Force (N)');
-title('Continuous: Fhighs, Flows, Famp vs Time', test_details);
-legend('Fhigh fit','Flow fit','Famp fit','Location','northwest');
-hold off;
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% --- Plot Stress -----
-figure('Name','Continuous: Stress vs Time');
-hold on; grid on;
-plot(t_C, Fhigh_fitC/xarea/1e6, '-r', 'LineWidth', 2);
-plot(t_C, Flow_fitC/xarea/1e6,  '-b', 'LineWidth', 2);
-plot(t_C, SampC, '-k', 'LineWidth', 2);          % amplitude fit
-xlabel('Time (s)'); ylabel('Stress (MPa)');
-title('Continuous: Stress vs Time', test_details);
-legend('Shighs','Slows','Samp','Location','northwest');
-hold off;
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-%% Continuous: d1 calculation using continuous theta
-
-movmean_thetaC = movmean(theta_C, SFnewDissipation, 'endpoints','fill');
-
-% ------------------------------ tau(theta)  [Continuous Case]
-
-% Check if tau_table exists and is not empty
-if exist('tau_table','var') && ~isempty(tau_table)
-
-    % Sort tau table
-    [tauThetaSorted, idx] = sort(tau_table.Theta);
-    tauSorted = tau_table.Tau(idx);
-
-    % Initialise tau array
-    tau_exp = NaN(size(movmean_thetaC));
-
-    % Identify theta bounds
-    theta_min = tauThetaSorted(1);
-    theta_max = tauThetaSorted(end);
-
-    % Case 1: theta below minimum -> use minimum tau
-    idx_low = movmean_thetaC <= theta_min;
-    tau_exp(idx_low) = tauSorted(1);
-
-    % Case 2: theta above maximum -> use maximum tau
-    idx_high = movmean_thetaC >= theta_max;
-    tau_exp(idx_high) = tauSorted(end);
-
-    % Case 3: theta within bounds -> interpolate
-    idx_mid = ~(idx_low | idx_high);
-    tau_exp(idx_mid) = interp1( ...
-        tauThetaSorted, ...
-        tauSorted, ...
-        movmean_thetaC(idx_mid), ...
-        'linear' );
-
-    figure('Name','tau vs movmean ThetaC and tau Theta');
-    plot(movmean_thetaC, tau_exp, '-r','DisplayName','\tau vs \theta_{mean,C}');
-    grid on
-    title('\tau vs \theta_C')
-    hold on
-    plot(tau_table.Theta,tau_table.Tau, '.b', 'DisplayName','tau table');
-    legend
-
-else
-    % ---- for constant tau value ----
-    tau_exp = tau * ones(size(movmean_thetaC));
-
-end
-
-% --------------------------------------- d1C
-d1C = nan(size(theta_C));
-kd = (SFnewDissipation - 1) / 2;
-
-for k = SFnewDissipation : length(theta_C) - (SFnewDissipation - 1)
-    d1C(k) = rho * C * ( ...
-        (movmean_thetaC(k+kd) - movmean_thetaC(k-kd)) / ...
-        (t_C(k+kd) - t_C(k-kd)) + ...
-        movmean_thetaC(k) / tau_exp(k) );
-end
-% DD = d1C/1000;
-
-d1C = d1C/1000; % Converting units into kilo
-
-% d1C = d1C + 672; % offset in case d1 started below zero due to
-% temperature issue
-% if mean(theta) > 0
-% Z3 = d1C(~isnan(d1C));
-% d1C = d1C - Z3(1);
-% end
-
-figure('Name','Continuous: d1C and Avg. Theta vs Time')
-plot(t_C, d1C, '.b')
-title('Continuous: d1C during loading', test_details)
-grid on
-xlabel('Time (s)')
-ylabel('d1 (kW/m³)')
-yyaxis right
-plot(t_C, movmean_thetaC, '-r', linewidth = 3)
-ylabel('\theta (K)');
-legend('d1','Avg. \theta','Location', 'northwest');
-
-D1C = d1C / LF; % Normalize by loading frequency
-
-
-%% Continuous: Plotting section
-
-% --- d1 & stress amplitude vs Time
-figure('Name','Continuous: d1C and SampC vs Time')
-plot(t_C, d1C, '.b', 'LineWidth', 1.5); % in kW/m3
-title(char(sprintf('Continuous: d1, and Samp vs Time (Window Size: %0.0fs - %s)', ...
-    windowDissipation, test_details)));
-ylabel('d1 - Sum of Heat Sources (kW/m^3)');
-xlabel('Time (s)')
-% hold on
-% plot(t_continuous, movmean_thetaC, '-r', 'LineWidth', 1.5); %
-% xlabel('Time (s)');
-% title(sprintf('Continuous: d1, Avg.\theta and \\sigma_{amp} vs Time\n(Window Size: %0.0fs - %s)', window, testName_withDate));
-% ylabel('d1 (kW/m^3) / \theta (K)');
-yyaxis right;
-plot(t_C, SampC, '-.m', LineWidth=2)
-ylabel('Stress Amplitude (MPa)');
-ax = gca;
-ax.YAxis(2).Color = 'm';
-legend('d1', '\sigma_{amp}','Location', 'northwest');
-grid on;
-% legend('d1', 'Avg.\theta','\sigma_{amp}','Location', 'northwest');
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% ---- d1, Theta, and Avg.Theta vs stress amplitude
-figure('Name','Continuous: d1C, Theta, and Avg.Theta  vs SampC')
-plot(SampC, theta_C,'-r');%, linewidth = 2)
-hold on
-plot(SampC, movmean_thetaC, '-g', linewidth = 1.5)
-ylabel('\theta (K)')
-xlabel('\sigma_{amp} (MPa)');
-
-yyaxis right
-plot(SampC, d1C, '.b');
-title(char(sprintf('Continuous: d1C, theta, and Avg. theta vs Samp (Window Size: %0.0fs - %s)', windowDissipation, test_details)));
-ylabel('d1 - Mechanical Dissipation (kW/m^3)');
-ax = gca;
-ax.YAxis(2).Color = 'b';
-legend('\theta','Avg. \theta','d1','Location','northwest')
-% legend('d1', '\theta','Location','northwest')
-grid on;
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% % ---- d1 and diff(Avg. Theta) vs stress amplitude
-figure('Name','Continuous: d1C and diff(Avg.Theta) vs SampC');
-plot(SampC(2:end), diff(movmean_thetaC), '-r', linewidth = 1)
-ylabel('diff (Avg.\theta)  (K)')
-title(sprintf('Continuous: d1 and diff (Avg.theta) vs Samp (Window Size: %0.0fs - %s)', windowDissipation, test_details));
-xlabel('\sigma_{amp} (MPa)');
-yyaxis right
-plot(SampC, d1C, '.b');
-ylabel('d1 - Sum of Heat Sources (kW/m^3)');
-ax = gca;
-ax.YAxis(2).Color = 'b';
-legend('diff (Avg.\theta)','d1', 'Location','northwest')
-grid on;
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% ---- D1, Theta, and Avg.Theta vs stress amplitude
-figure('Name','Continuous: D1C, Theta, and Avg.Theta  vs SampC')
-plot(SampC, theta_C,'-r');%, linewidth = 2)
-hold on
-plot(SampC, movmean_thetaC, '-g', linewidth = 1.5)
-ylabel('\theta (K)')
-xlabel('\sigma_{amp} (MPa)');
-
-yyaxis right
-plot(SampC, D1C, '.b');
-title(sprintf('Continuous: D1C, theta, and Avg.theta vs Samp (Window Size: %0.0fs - %s)', windowDissipation, test_details));
-ylabel('Mechanical Dissipation - D1 (kJ/m^3)');
-ax = gca;
-ax.YAxis(2).Color = 'b';
-legend('\theta','Avg. \theta','D1','Location','northwest')
-% legend('d1', '\theta','Location','northwest')
-grid on;
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% ----- d1, d1C
-figure('Name','d1, d1C vs Samp')
-plot(SampInterp,d1,'-b', LineWidth=2)
-hold on;
-plot(SampC,d1C,'-k', LineWidth=1.5)
-grid on
-title('d1, d1C vs \sigma_{amp} ', test_details);
-xlabel('\sigma_{amp} (MPa)')
-ylabel('d1 (kW/m³)')
-legend ('d1','d1C',Location='northwest')
-
-% ----- D1, D1C
-figure('Name','D1, D1C vs Samp')
-plot(SampInterp,D1,'-b', LineWidth=2)
-hold on;
-plot(SampC,D1C,'-k', LineWidth=1.5)
-grid on
-title('D1, D1C vs \sigma_{amp} ', test_details);
-xlabel('\sigma_{amp} (MPa)')
-ylabel('D1 (kJ/m³)')
-legend ('D1','D1C',Location='northwest')
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-%% ------ Different ways to plot d1
-% figure('Name','d1, d1-theta-selfheating, d1C')
-% plot((SampInterp(2:end)),diff(d1),'-b', LineWidth=2)
-% hold on;
-% plot((SampInterp(2:end)),diff(d1_SelfHeating),'-r', LineWidth=2)
-% plot((SampC(2:end)),diff(d1C),'-k', LineWidth=1.5)
-% grid on
-% title('d1, d1-self-heating, d1C vs \sigma_{amp}')
-% xlabel('\sigma_{amp} (MPa)')
-% ylabel('d1 (kW/m³)')
-% legend ('d1','d1_{SelfHeating}','d1C',Location='northwest')
-%
-% % --- Rate of mechanical dissipation
-% dSamp = mode(diff(SampInterp));
-% d_d1 = gradient(d1_SelfHeating, dSamp);
-% figure;
-% plot(SampInterp, d_d1, 'm', 'LineWidth', 2);
-% grid on
-% xlabel('\sigma_{amp} (MPa)')
-% ylabel('d d_1 / dSamp')
-% title('Rate of mechanical dissipation')
-%
-% % ---- Acceleration of dissipation
-% dd_d1 = gradient(gradient(d1_SelfHeating, dSamp), dSamp);
-% figure;
-% plot(SampInterp, dd_d1, 'm', 'LineWidth', 2);
-% grid on
-% xlabel('\sigma_{amp} (MPa)')
-% ylabel('d^2 d_1 / dSamp^2')
-% title('Acceleration of dissipation')
-%
-%
-% ZZ = diff(movmean(diff(d1_SelfHeating),SF));
-% figure;
-% plot(SampInterp(3:end),ZZ); grid on
-
-%% Continuous: Frequency Analysis of Theta of Loading Period
-N_thetaCLoading = length(theta_C);
-f = (0:floor(N_thetaCLoading/2)) * (SF / N_thetaCLoading);
-
-% FFT computation
-P1 = abs(fft(theta_C,N_thetaCLoading)) * (2/N_thetaCLoading);
-P1 = P1(1 : floor(N_thetaCLoading/2)+1);
-P1(1) = NaN; % Remove DC component
-
-figure('Name', 'Continuous: Amplitude Spectrum');
-plot(f, log(P1), '.r', 'MarkerSize', 5, DisplayName='theta-loading'); hold on;
-title('Continuous: \theta (loading) Single-Sided Amplitude Spectrum (DC Removed)', test_details);
-xlabel('Frequency (Hz)');
-xticks(0:LF:ceil(SF/2/100)*100)
-ylabel('Amplitude (log)');
-grid on;
-legend
-
-N_thetaCLoadingTrunc = N_thetaCLoading;
-while mod(N_thetaCLoadingTrunc, SF/LF) >= 1e-9
-    N_thetaCLoadingTrunc = N_thetaCLoadingTrunc -1;
-end
-
-Ndiff = N_thetaCLoading - N_thetaCLoadingTrunc;
-thetaTruncIdx = flip(N_thetaCLoading:-1:Ndiff-1);
-
-thetaTrunc = theta_C(thetaTruncIdx);
-
-fTrunc = (0:floor(N_thetaCLoadingTrunc/2)) * (SF / N_thetaCLoadingTrunc);
-
-% FFT computation
-P1Trunc = abs(fft(thetaTrunc,N_thetaCLoadingTrunc)) * (2/N_thetaCLoadingTrunc);
-P1Trunc = P1Trunc(1 : floor(N_thetaCLoadingTrunc/2)+1);
-P1Trunc(1) = NaN; % Remove DC component
-
-hold on
-plot(fTrunc, log(P1Trunc), '.b', 'MarkerSize', 5, DisplayName='theta-loading truncated');
-
-%% Continuous: FFT on sliding windows
-
-N_thetaC = length(theta_C);
-
-FL2 = 2*LF;                % 2nd harmonic [Hz]
-FL3 = 3*LF;                % 3rd harmonic [Hz]
-
-% Aliasing check
-if FL3 > SF/2
-    warning(['\n################################\n' ...
-        'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
-        '################################'], FL3, SF/2);
-end
-
-% --- Arbitrary frequencies ---
-fA = LF - 3;
-fB = LF + 2;
-fC = LF + LF/2; %FL - 5;
-fD = LF*2 - 2 ; %FL + 5;
-fE = LF*2 + 2; %FL*2 - 5;
-fF = LF*2 + 13; %FL*2 + 5;
-arbitraryFreqs = [fA, fB, fC, fD, fE, fF];
-
-% --- FFT frequency axis ---
-f = (0:SFnewTSA-1) * (SF/SFnewTSA);
-nWin = N_thetaC - SFnewTSA + 1; % # of windows in the whole theta vector
-tplot = t_C(1:nWin);
-% loading window
-loading_start = t_C(1);%(idx_Theta_sync(1));
-loading_end = t_C(end); %(temp_idxE - SF*window);
-loading_window = find(tplot >= loading_start & tplot <= loading_end);
-
-% ###########################
-% ###########################
-SampInterp_x = SampC (1:nWin);
-SampInterp_x = SampInterp_x(:);
-
-% ###########################
-% ###########################
-
-% --- Preallocate ---
-maxAmpH1C = nan(nWin,1); maxFreqH1C = nan(nWin,1); ampAtH1C = nan(nWin,1); % ampAtH1C = Amplitude At H1 Continuous theta data
-maxAmpH2C = nan(nWin,1); maxFreqH2C = nan(nWin,1); ampAtH2C = nan(nWin,1);
-maxAmpH3C = nan(nWin,1); maxFreqH3C = nan(nWin,1); ampAtH3C = nan(nWin,1);
-ampAtArbitC = nan(nWin, length(arbitraryFreqs));
-
-
-% --- Sliding window ---
-%% --- Continuous: SHTSA FFT method
-for k = 1:nWin
-
-    end_idx = k+SFnewTSA-1;
-    segment = detrend(theta_C(k : end_idx), 4);
-    % segment = detrend(theta(k : end_idx), 1);
-    % segment = theta_C(k : end_idx);
-    beta = abs(fft(segment)) * (2/SFnewTSA);
-
-    idx1 = find(f >= (LF-BW) & f <= (LF+BW));
-    [maxAmpH1C(k), j1] = max(beta(idx1)); maxFreqH1C(k) = f(idx1(j1));
-    [~, i1] = min(abs(f - LF)); ampAtH1C(k) = beta(i1);
-
-    idx2 = find(f >= (FL2-BW) & f <= (FL2+BW));
-    [maxAmpH2C(k), j2] = max(beta(idx2)); maxFreqH2C(k) = f(idx2(j2));
-    [~, i2] = min(abs(f - FL2)); ampAtH2C(k) = beta(i2);
-
-    if FL3<SF/2
-        idx3 = find(f >= (FL3-BW) & f <= (FL3+BW));
-        [maxAmpH3C(k), j3] = max(beta(idx3)); maxFreqH3C(k) = f(idx3(j3));
-        [~, i3] = min(abs(f - FL3)); ampAtH3C(k) = beta(i3);
-    end
-
-    for j = 1:length(arbitraryFreqs)
-        [~, idx] = min(abs(f - arbitraryFreqs(j)));
-        ampAtArbitC(k, j) = beta(idx);
-    end
-
-end
-
-% --- Construct central time reference for overlaying theta ---
-winCentreIdx = (1:nWin) + floor(SFnewTSA/2);
-
-%% --- Continuous: Plots of Amplitudes from FFT method ---
-
-% -- Harmonic Amplitudes and Theta vs Time
-figure('Name','Continuous: Harmonic Amplitudes and Theta vs Time'); %,'NumberTitle','off');
-
-nn = 3;
-if FL3>SF/2
-    nn = 2;
-end
-
-subplot(nn,2,1); % ---- in this subplot no average of amplitude as the amplitud is not very noisy
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx), '-b');
-ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right
-ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, ampAtH1C, 'k', 'LineWidth', 3);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Amp @ %.f Hz', LF)); grid on;
-xlabel('Time (s)')
-legend('\theta','Amp', 'Location', 'northwest');
-% legend('Amp', 'Avg. \theta','Location', 'northwest');
-
-subplot(nn,2,2); % ---- in this subplot no average of amplitude as the amplitud is not very noisy
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx), '-b');
-ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right
-ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, maxAmpH1C, 'k', 'LineWidth', 3);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF, BW)); grid on;
-xlabel('Time (s)')
-legend('\theta','Amp', 'Location', 'northwest');
-
-
-subplot(nn,2,3);
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right
-ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, ampAtH2C, 'g', 'LineWidth', 2);
-hold on;
-plot(tplot, movmean(ampAtH2C, SFnewTSA, 'Endpoints', 'fill'), 'm-', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Amp @ %.f Hz', FL2)); grid on;
-xlabel('Time (s)')
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-
-subplot(nn,2,4);
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right
-ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, maxAmpH2C, 'm', 'LineWidth', 2);
-hold on; plot(tplot, movmean(maxAmpH2C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
-xlabel('Time (s)')
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-if FL3<SF/2
-    subplot(nn,2,5);
-    yyaxis left
-    % plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(tplot, theta_C(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(tplot, ampAtH3C, 'y', 'LineWidth', 2);
-    hold on; plot(tplot, movmean(ampAtH3C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-    ylabel('Amp (K)');
-    title(sprintf('Continuous: Amp @ %.f Hz', FL3)); grid on;
-    xlabel('Time (s)')
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-
-    subplot(nn,2,6);
-    yyaxis left
-    % plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(tplot, theta_C(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(tplot, maxAmpH3C, 'c', 'LineWidth', 2);
-    hold on; plot(tplot, movmean(maxAmpH3C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-    ylabel('Amp (K)');
-    title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
-    xlabel('Time (s)')
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-end
-
-sgtitle(sprintf('Continuous: %.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowTSA,test_details));
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-% -- Continuous: Harmonic Amplitudes and Theta vs Stress amplitude
-figure('Name','Continuous: Harmonic Amplitudes and Theta vs Stress Amp'); %);%,'NumberTitle','off');
-
-subplot(nn,2,1);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, ampAtH1C(loading_window), 'k', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Amp @ %.f Hz', LF)); grid on;
-xlabel('\sigma_{amp} (MPa)');
-% legend('Amp', 'Avg. \theta','Location', 'northwest');
-legend('\theta','Amp','Location', 'northwest');
-
-subplot(nn,2,2);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, maxAmpH1C(loading_window), 'k', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF, BW)); grid on;
-xlabel('\sigma_{amp} (MPa)');
-% legend('Amp','Avg. \theta','Location', 'northwest');
-legend('\theta','Amp','Location', 'northwest');
-
-subplot(nn,2,3);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, ampAtH2C(loading_window), 'g', 'LineWidth', 2);
-hold on;
-plot(SampInterp_x, movmean(ampAtH2C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Amp @ %.f Hz', FL2)); grid on;
-xlabel('\sigma_{amp} (MPa)');
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-subplot(nn,2,4);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, maxAmpH2C(loading_window), 'm', 'LineWidth', 2);
-hold on; plot(SampInterp_x, movmean(maxAmpH2C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-ylabel('Amp (K)');
-title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
-xlabel('\sigma_{amp} (MPa)');
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-if FL3<SF/2
-    subplot(nn,2,5);
-    yyaxis left
-    % plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(SampInterp_x, ampAtH3C(loading_window), 'y', 'LineWidth', 2);
-    hold on; plot(SampInterp_x, movmean(ampAtH3C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-    ylabel('Amp (K)');
-    title(sprintf('Continuous: Amp @ %.f Hz', FL3 )); grid on;
-    xlabel('\sigma_{amp} (MPa)');
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-
-    subplot(nn,2,6);
-    yyaxis left
-    % plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(SampInterp_x, maxAmpH3C(loading_window), 'c', 'LineWidth', 2);
-    hold on; plot(SampInterp_x, movmean(maxAmpH3C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
-    ylabel('Amp (K)');
-    title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
-    xlabel('\sigma_{amp} (MPa)');
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-end
-
-sgtitle(sprintf('Continuous: %.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowTSA,test_details));
-
-% --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
-
-%% --- Continuous: Traditional method
-% Generate reference signals
-% tref_signal = (0:N_thetaC-1) / SF;
-tref_signal = t_C'; %(0:dt:(length(F_continuous)-1)*dt);
-
-% tref_signal = tref_signal(:);
-X1 = cos(2 * pi * LF * tref_signal)'; %FL_analysed
-Y1 = sin(2 * pi * LF * tref_signal)';
-
-X2 = cos(2 * pi * 2*LF * tref_signal)';
-Y2 = sin(2 * pi * 2*LF * tref_signal)';
-
-X3 = cos(2 * pi * 3*LF * tref_signal)';
-Y3 = sin(2 * pi * 3*LF * tref_signal)';
-
-for k = 1:nWin
-
-    end_idx = k+SFnewTSA-1;
-
-    if end_idx > N_thetaC
+    if end_idx > N_theta
         break;
     end
 
-    segment = detrend(theta_C(k : end_idx), 6); % - mean(theta(start_idx : end_idx)); Detrend removed the mean of theta
-    % segment = detrend(theta(k : end_idx), 1);
-    % segment = theta_C(k : end_idx);
+    kIndices = k:end_idx;
+    kIndices = kIndices(:);
 
-    H1_cosC(k) = sum(segment .* X1(k : end_idx)) / ((SFnewTSA)/2);
-    H1_sinC(k) = sum(segment .* Y1(k : end_idx)) / ((SFnewTSA)/2);
+    % --------- Signal segment
+    segment = detrend(theta(kIndices), pOrder);
+    % segment = theta(kIndices);
+    segment = segment(:);
 
-    H2_cosC(k) = sum(segment .* X2(k : end_idx)) / ((SFnewTSA)/2);
-    H2_sinC(k) = sum(segment .* Y2(k : end_idx)) / ((SFnewTSA)/2);
+    t_seg = tref_signal(kIndices);
 
-    H3_cosC(k) = sum(segment .* X3(k : end_idx)) / ((SFnewTSA)/2);
-    H3_sinC(k) = sum(segment .* Y3(k : end_idx)) / ((SFnewTSA)/2);
+    A = [ ...
+        cos(2*pi*LF*t_seg),  sin(2*pi*LF*t_seg), ...
+        cos(2*pi*2*LF*t_seg),sin(2*pi*2*LF*t_seg), ...
+        cos(2*pi*3*LF*t_seg),sin(2*pi*3*LF*t_seg) ...
+        ];
 
-    % T_mean(k) = mean(T_0D_segment);
-    AmpH1_windowC(k) = sqrt(H1_sinC(k)^2 + H1_cosC(k)^2);
-    AmpH2_windowC(k) = sqrt(H2_sinC(k)^2 + H2_cosC(k)^2);
-    AmpH3_windowC(k) = sqrt(H3_sinC(k)^2 + H3_cosC(k)^2);
+    Aw = A .* applyHANN;
+    yw = segment .* applyHANN;
+
+    % --------- Least squares solution
+    coeff = Aw \ yw;
+
+    % --------- Extract coefficients
+    a1 = coeff(1); b1 = coeff(2);
+    a2 = coeff(3); b2 = coeff(4);
+    a3 = coeff(5); b3 = coeff(6);
+
+    % --------- Amplitudes
+    AmpH1_LS(k) = sqrt(a1^2 + b1^2);
+    AmpH2_LS(k) = sqrt(a2^2 + b2^2);
+    AmpH3_LS(k) = sqrt(a3^2 + b3^2);
+
+    % --------- Phase (optional, very useful)
+    PhaseH1_LS(k) = atan2(b1, a1);
+    PhaseH2_LS(k) = atan2(b2, a2);
+    PhaseH3_LS(k) = atan2(b3, a3);
+
 end
 
-% --- plots
+% --------- Time reference
+winCentreIdx = (1:nWinTheta) + floor(SFnewTSA/2);
 
-% tplot = tTheta_sync(winCentreIdx);
-% tplot = t_continuous(1:nWin);
-% tplot = t_continuous(winCentreIdx);
-% Combined figure with three subplots for H1, H2, H3 amplitudes
-figure('Name','Continuous: Harmonic Amplitudes and Theta vs time'); %,'NumberTitle','off');
-subplot(nn,1,1);
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, AmpH1_windowC, LineWidth=2); grid on; title(sprintf('Continuous: H1 Amplitude at %.f Hz', LF));
-% hold on;
-% plot(tplot, movmean(AmpH1_windowC, smoothing, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-ylabel('Amp (K)'); xlabel('Time (s)');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-% legend('Amp','Avg. \theta','Location', 'northwest');
-% legend('Amp','\theta','Location', 'northwest');
-legend('\theta','Amp','Location', 'northwest');
+% -------------- Paper Figure
+figure('Name','LS H1 Amplitude vs Stress'); hold on; grid on
+title('LS H1 Amplitude')
 
-subplot(nn,1,2);
-yyaxis left
-% plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(tplot, theta_C(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(tplot, AmpH2_windowC); grid on; title(sprintf('Continuous: H2 Amplitude at %.f Hz', FL2));
-hold on;
-plot(tplot, movmean(AmpH2_windowC, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-ylabel('Amp (K)'); xlabel('Time (s)');
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+h = plot(SampInterp_x, AmpH1_LS, 'ok','MarkerSize',4,'DisplayName','H1 Raw');
+set(h, 'MarkerFaceColor', h.Color);
 
-if FL3<SF/2
-    subplot(nn,1,3);
-    yyaxis left
-    % plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(tplot, theta_C(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(tplot, AmpH3_windowC); grid on; title(sprintf('Continuous: H3 Amplitude at %.f Hz', FL3));
-    hold on;
-    plot(tplot, movmean(AmpH3_windowC, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-    ylabel('Amp (K)'); xlabel('Time (s)');
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-end
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (K)')
 
-sgtitle(sprintf('Continuous: %.1fs Sliding-Window Harmonic Analysis using Reference Signals\n(mean \\theta removed) - %s', windowTSA, test_details));
+xlim([0 210])
+xticks(0:20:220)
+xtickangle(0)
+
+ylim([0 0.4])
+yticks(0:0.1:0.4)
+set(gcf, 'Position', [688 535 657 400])
+set(gca, 'FontSize', 18)
+box on
 
 % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
@@ -3174,65 +2571,28 @@ figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like 
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-% ----- Harmonic Amp. and Theta vs Stress Amp
-% loading period in temperatue and tTemp: idx_Theta_sync(1):theta_idxE
-% so the time should statrt when time is => than the time value at
-% idx_Theta_sync(1) and ends at when the time value is =< theta_idxE.
 
+figure('Name','T0D: LS H2 & H3 Amplitudes vs Stress'); hold on; grid on
+title(sprintf('T0D: LS H2 and H3 Harmonic Amplitudes - porder = %0.0f', pOrder))
 
+h = plot(SampInterp_x, AmpH2_LS*1e3, 'og','MarkerSize',4,'DisplayName','H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
 
-AmpH1_loading = AmpH1_windowC(loading_window);
-AmpH2_loading = AmpH2_windowC(loading_window);
-AmpH3_loading = AmpH3_windowC(loading_window);
+h = plot(SampInterp_x, AmpH3_LS*1e3, 'ob','MarkerSize',4,'DisplayName','H3 Raw');
+set(h, 'MarkerFaceColor', h.Color);
 
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (mK)')
 
-figure('Name','Continuous: Harmonic Amp. and Theta vs Stress Amp'); %);%,'NumberTitle','off');
-subplot(nn,1,1);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, AmpH1_loading, LineWidth=2); grid on; title(sprintf('Continuous: H1 Amplitude at %.f Hz', LF));
-% hold on;
-% plot(SampInterp, movmean(AmpH1_loading, smoothing, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Location', 'northwest');
+xlim([0 210])
+xticks(0:20:220)
+xtickangle(0)
 
-
-subplot(nn,1,2);
-yyaxis left
-% plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-plot(SampInterp_x, AmpH2_loading); grid on; title(sprintf('Continuous: H2 Amplitude at %.f Hz', FL2));
-hold on;
-plot(SampInterp_x, movmean(AmpH2_loading, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
-% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-
-
-if FL3<SF/2
-    subplot(nn,1,3);
-    yyaxis left
-    % plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
-    plot(SampInterp_x, theta_C(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
-    title(sprintf('Continuous: H3 Amplitude at %.f Hz', FL3));
-    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
-    plot(SampInterp_x, AmpH3_loading, linewidth = 1.2); grid on;
-    hold on;
-    plot(SampInterp_x, movmean(AmpH3_loading, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
-    ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
-    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
-    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
-    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
-end
-
-sgtitle(sprintf('Continuous: %.1fs Sliding-Window Harmonic Analysis using Reference Signals\n (mean \\theta removed - %s)', windowTSA,test_details));
+ylim([0 4])
+yticks(0:1:4)
+set(gcf, 'Position', [688 535 657 400])
+set(gca, 'FontSize', 12)
+box on
 
 % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
@@ -3240,144 +2600,321 @@ figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like 
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-%% --- Continuous: Arbitrary Frequencies with Theta Overlay ---
-% figure('Name','Continuous: All Arbitrary Frequency Amplitudes with Theta');%);%,'NumberTitle','off');
-% nCols = 2; nRows = ceil(length(arbitraryFreqs) / nCols);
-% for j = 1:length(arbitraryFreqs)
-%     subplot(nRows, nCols, j);
-%     yyaxis left; ax = gca; ax.YAxis(2).Color = 'k';
-%     plot(tplot, ampAtArbitC(:, j), '--', 'LineWidth', 2);
-%     ylabel('Amp (K)');
-%     title(sprintf('Amp @ %.2f Hz', arbitraryFreqs(j))); grid on;
-%
-%     yyaxis right
-%     plot(tplot, movmean(theta_C(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
-%     ylabel('\theta (K)'); xlabel('Time (s)')
-%     legend('Amp','Avg. \theta','Location', 'northwest');
-% end
-% % sgtitle('Amplitude at Arbitrary Frequencies with Theta Overlay');
-% sgtitle(sprintf('%.1fs Sliding-Window Arbitrary Frequencies FFT Analysis\n (mean \\theta removed) - %s', window,testName_withDate));
-%
-%
-% % -- Arbitrary Frequencies' Amp vs Stress Amp
-% figure('Name','Continuous: Arbitrary Freq Amps vs Stres Amp');%);%,'NumberTitle','off');
-% nCols = 2; nRows = ceil(length(arbitraryFreqs) / nCols);
-% for j = 1:length(arbitraryFreqs)
-%     subplot(nRows, nCols, j);
-%     yyaxis left; ax = gca; ax.YAxis(2).Color = 'k';
-%     plot(SampInterp, ampAtArbitC(loading_window, j), '--', 'LineWidth', 2);
-%     ylabel('Amp (K)');
-%     title(sprintf('Amp @ %.2f Hz', arbitraryFreqs(j))); grid on;
-%
-%     yyaxis right
-%     plot(SampInterp, movmean(theta_C(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]);
-%     ylabel('\theta (K)'); xlabel('\sigma_{amp} (MPa)');
-%     legend('Amp','Avg. \theta','Location', 'northwest');
-%
-% end
-% % sgtitle('Amplitude at Arbitrary Frequencies with Theta Overlay');
-% sgtitle(sprintf('%.1fs Sliding-Window Arbitrary Frequencies FFT Analysis\n (mean \\theta removed) - %s', window,testName_withDate));
+%% T0D: Frequency Adaptive Least Square Method
+% clc
+tref_signal = tTheta(:);
+% tref_signal = (0:N_theta-1) / SF;
+nWinTheta = N_theta - SFnewTSA + 1;
+applyHANN = hann(SFnewTSA);
+applyHANN = applyHANN(:);
 
-%% ---Continuous: Frequency Peak Tracking Only ---
-figure('Name','Continuous: Harmonic Peak Frequencies');%,'NumberTitle','off');
+fSearch = linspace(LF-BW, LF+BW, 15);   % frequency search grid
 
-subplot(nn,1,1);
-plot(tplot, maxFreqH1C,'b','LineWidth',1.2);
-title(sprintf('Continuous: Peak Freq in %.f\\pm%.1f Hz', LF, BW));
-ylabel('Freq (Hz)');
-xlabel('Time (s)'); grid on;
+for k = 1:nWinTheta
 
-subplot(nn,1,2);
-plot(tplot, maxFreqH2C,'m','LineWidth',1.2);
-title(sprintf('Continuous: Peak Freq in %.f\\pm%.1f Hz', FL2, BW));
-ylabel('Freq (Hz)');
-xlabel('Time (s)'); grid on;
+    end_idx = k + SFnewTSA - 1;
 
-if FL3<SF/2
-    subplot(nn,1,3);
-    plot(tplot, maxFreqH3C,'c','LineWidth',1.2);
-    title(sprintf('Continuous: Peak Freq in %.f\\pm%.1f Hz', FL3, BW));
-    ylabel('Freq (Hz)');
-    xlabel('Time (s)'); grid on;
+    if end_idx > N_theta
+        break;
+    end
+
+    kIndices = (k:end_idx)';
+    segment = detrend(theta(kIndices), 6);
+    % segment = theta(kIndices);
+    segment = segment(:);
+    t_seg = tref_signal(kIndices);
+
+    bestErr = inf;
+
+    % --------- Frequency search
+    for ftest = fSearch
+
+        A = [ ...
+            cos(2*pi*ftest*t_seg),   sin(2*pi*ftest*t_seg), ...
+            cos(2*pi*2*ftest*t_seg),sin(2*pi*2*ftest*t_seg), ...
+            cos(2*pi*3*ftest*t_seg),sin(2*pi*3*ftest*t_seg) ...
+            ];
+
+        % Weighted LS (efficient form)
+        Aw = A .* applyHANN;
+        yw = segment .* applyHANN;
+
+        coeff = Aw \ yw;
+
+        residual = norm(yw - Aw*coeff);
+
+        if residual < bestErr
+            bestErr = residual;
+            bestCoeff = coeff;
+            bestFreq(k) = ftest;
+        end
+    end
+
+    % --------- Extract coefficients
+    a1 = bestCoeff(1); b1 = bestCoeff(2);
+    a2 = bestCoeff(3); b2 = bestCoeff(4);
+    a3 = bestCoeff(5); b3 = bestCoeff(6);
+
+    % --------- Amplitudes
+    AmpH1_LSFA(k) = sqrt(a1^2 + b1^2); % FA = Frequency Addaptive
+    AmpH2_LSFA(k) = sqrt(a2^2 + b2^2);
+    AmpH3_LSFA(k) = sqrt(a3^2 + b3^2);
+
+    % --------- Phases
+    PhaseH1_LSFA(k) = atan2(b1, a1);
+    PhaseH2_LSFA(k) = atan2(b2, a2);
+    PhaseH3_LSFA(k) = atan2(b3, a3);
+
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window - Peak Frequency Tracking vs. Time\n (mean \\theta removed) - %s', windowTSA,test_details));
+winCentreIdx = (1:nWinTheta) + floor(SFnewTSA/2);
+
+%% --- T0D: Frequency-Adaptive Least Square Method Peak Tracking Only ---
+% ------------- Best Frequency Track
+
+bestFreq_H1 = bestFreq;        % 1f
+bestFreq_H2 = 2 * bestFreq;    % 2f
+bestFreq_H3 = 3 * bestFreq;    % 3f
+figure('Name','T0D: Adaptive Frequency vs Stress Amplitude');
+
+tiledlayout(3,1)
+
+% ===================== H1 =====================
+nexttile; hold on
+
+plot(SampInterp_x, bestFreq_H1, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','b', 'MarkerEdgeColor','b', ...
+    'DisplayName','Raw');
+
+plot(SampInterp_x, movmean(bestFreq_H1,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+title(sprintf('H1 Frequency Evolution (~%d Hz)', LF))
+grid on
+legend('Location','best')
+
+% ===================== H2 =====================
+nexttile; hold on
+
+plot(SampInterp_x, bestFreq_H2, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','r', 'MarkerEdgeColor','r', ...
+    'DisplayName','Raw');
+
+plot(SampInterp_x, movmean(bestFreq_H2,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+title(sprintf('H2 Frequency Evolution (~%d Hz)', 2*LF))
+grid on
+legend('Location','best')
+
+% ===================== H3 =====================
+nexttile; hold on
+
+plot(SampInterp_x, bestFreq_H3, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','g', 'MarkerEdgeColor','g', ...
+    'DisplayName','Raw');
+
+plot(SampInterp_x, movmean(bestFreq_H3,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+xlabel('\sigma_{amp} (MPa)')
+title(sprintf('H3 Frequency Evolution (~%d Hz)', 3*LF))
+grid on
+legend('Location','best')
+
+% --------- Formatting
+set(gcf, 'Position', [650 200 650 700])
+set(findall(gcf,'-property','FontSize'),'FontSize',12)
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% T0D: Plots of Frequency-Adaptive LS Harmonic Amplitudes
+
+theta_plot = theta(winCentreIdx);
+
+figure('Name','T0D: Adaptive LS Harmonics (Amplitude)');
+tiledlayout(3,1)
+
+% ---------- H1
+nexttile; hold on
+yyaxis left
+plot(SampInterp_x, theta_plot, 'b', 'LineWidth', 2)
+ylabel('\theta (K)')
+
+yyaxis right
+plot(SampInterp_x, AmpH1_LSFA, 'r')
+plot(SampInterp_x, movmean(AmpH1_LSFA,5),'k','LineWidth',2)
+ylabel('Amp (K)')
+% title(sprintf('H1 @ ~%.2f Hz', LF))
+title(sprintf('T0D: Frequency Adaptive LS Max Amp %.f\\pm%.1f Hz', LF, BW));
+grid on
+
+% ---------- H2
+nexttile; hold on
+yyaxis left
+plot(SampInterp_x, theta_plot, 'b', 'LineWidth', 2)
+
+yyaxis right
+plot(SampInterp_x, AmpH2_LSFA, 'r')
+plot(SampInterp_x, movmean(AmpH2_LSFA,5),'k','LineWidth',2)
+% set(gca,'YScale','log')
+% title(sprintf('H2 @ ~%.2f Hz', 2*LF))
+title(sprintf('T0D: Frequency Adaptive LS Max Amp %.f\\pm%.1f Hz', LF*2, BW));
+grid on
+
+% ---------- H3
+nexttile; hold on
+yyaxis left
+plot(SampInterp_x, theta_plot, 'b', 'LineWidth', 2)
+
+yyaxis right
+plot(SampInterp_x, AmpH3_LSFA, 'r')
+plot(SampInterp_x, movmean(AmpH3_LSFA,5),'k','LineWidth',2)
+% set(gca,'YScale','log')
+% title(sprintf('H3 @ ~%.2f Hz', 3*LF))
+title(sprintf('T0D: Frequency Adaptive LS Max Amp %.f\\pm%.1f Hz', LF*3, BW));
+xlabel('\sigma_{amp} (MPa)')
+grid on
+
+set(gcf,'Position',[600 200 700 800])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 
+%% ############   Force and Theta Segmentation  ################
+% **************************************************************
+% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+% @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 
-%% ############   Segment wise analysis  ################
-% *******************************************************
-% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-% @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
-
-% Ensure column vectors
-% Ensure column vector
-theta = theta(:);
-[peakVals, peakIdx] = findpeaks(theta);
-[troughVals_neg, troughIdx] = findpeaks(-theta);
+% ------------------- Segmentation of theta
+% [peakVals, peakIdx] = findpeaks(theta);
+% [troughVals_neg, troughIdx] = findpeaks(-theta);
+theta_MinPeakProminence = 0.03;
+[peakVals, peakIdx] = findpeaks(theta,'MinPeakProminence',theta_MinPeakProminence);
+[troughVals_neg, troughIdx] = findpeaks(-theta,'MinPeakProminence',theta_MinPeakProminence);
 troughVals = -troughVals_neg;   % restore original sign
 
-figure;
+figure('Name','Segments: Theta Peaks and Troughs');
 plot(theta, 'k', 'LineWidth', 1.2); hold on;
+title(sprintf('Segments: Theta Peaks and Troughs %s',test_details))
 plot(peakIdx, peakVals, 'ro', 'MarkerFaceColor', 'r');
 plot(troughIdx, troughVals, 'bo', 'MarkerFaceColor', 'b');
 xlabel('Frame Index');
 ylabel('\theta (K)');
-legend('\theta', 'Peaks', 'Troughs');
+legend('\theta', 'Peaks', 'Troughs','Location', 'best');
 grid on;
 
-% ------------------------------ Finding segment End indices
-DD_troughVals = diff(detrend(troughVals,6));
-figure; plot(DD_troughVals); grid; title('diff(detrend(troughVals,6))')
-ThreshTroughTheta = abs(mean(DD_troughVals))*1000;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
-idxE = find(DD_troughVals > ThreshTroughTheta);
-valE = DD_troughVals(idxE);
 
-troughIdxE = false(size(valE));
-troughIdxE(1) = true;       % always keep first value
+switch test_details
 
-currentValE = valE(1);
+    case {
+            'SS304L 20251118 Test1 Take1',...
+            'SS304L 20251118 Test1 Take2',...
+            'SS304L 20251118 Test2 Take7',...
+            'SS304L 20251118 Test2 Take8',...
+            'SS304L 20251118 Test2 Take9',...
+            'SS304L 20251118 Test2 Take10',...
+            'SS304L 20251118 Test2 Take11',...
+            'SS304L 20251118 Test2 Take12',...
+            'SS304L 20251118 Test2 Take13',...
+            'SS304L 20251118 Test2 Take14',...
+            }
+        % Only why test is test2_take13
+        DiffTroughIdx= diff(troughIdx);
+        MeanDiffTroughIdx = mean(DiffTroughIdx);
+        segThresh = 2 * MeanDiffTroughIdx;
+        segTroughIdxEnd = find(DiffTroughIdx > segThresh);
+        segTroughIdxStart = segTroughIdxEnd + 1;
 
-for k = 2:length(valE)
-    if valE(k) > currentValE
-        troughIdxE(k) = true;
-        currentValE = valE(k);   % update reference
-    end
+
+        % Map back to theta index space
+        theta_segIdxE = troughIdx(segTroughIdxEnd);
+        % theta_segIdxE = troughIdx(segTroughIdxEnd);
+
+        % Remove closely spaced jumps
+        theta_segIdxE = theta_segIdxE([true; diff(theta_segIdxE) > 20]);
+
+        % Segment boundaries
+        theta_segIdxE = [theta_segIdxE; numel(theta)];
+
+        % Map back to theta index space
+        theta_segIdxS = troughIdx(segTroughIdxStart); %
+
+    otherwise
+
+        % ------------------------------ theta: Finding segment End indices
+        DD_troughVals = diff(detrend(troughVals,6)); % In between each file jump diff(theta trough values) increases significantly (DD = Detrend and Diff)
+        figure('Name','Segments: Theta troughs segments'); plot(DD_troughVals); grid; title('diff(detrend(troughVals,6))')
+        ThreshTroughTheta = abs(mean(DD_troughVals))*1000;
+
+        idxE = find(DD_troughVals > ThreshTroughTheta);
+        valE = DD_troughVals(idxE);
+
+        troughIdxE = false(size(valE));
+        troughIdxE(1) = true;       % always keep first value
+
+        currentValE = valE(1);
+
+        for k = 2:length(valE)
+            if valE(k) > currentValE
+                troughIdxE(k) = true;
+                currentValE = valE(k);   % update reference
+            end
+        end
+
+        val_segE = valE(troughIdxE);
+
+        segIdxE_filtered = idxE(troughIdxE);
+
+        % Map back to theta index space
+        theta_segIdxE = troughIdx(segIdxE_filtered);
+
+        % Remove closely spaced jumps
+        theta_segIdxE = theta_segIdxE([true; diff(theta_segIdxE) > 20]);
+
+        % Segment boundaries
+        theta_segIdxE = [theta_segIdxE; numel(theta)];
+
+        % ---------------------------------- theta: Finding segment start indices
+        idxS = find(DD_troughVals < -ThreshTroughTheta);
+        valS = DD_troughVals(idxS);
+        troughIdxS = false(size(valS));
+        troughIdxS(1) = true;        % always keep first value
+
+        currentValS = valS(1);
+
+        for k = 2:length(valS)
+            if valS(k) < currentValS
+                troughIdxS(k) = true;
+                currentValS = valS(k);   % update reference
+            end
+        end
+
+        troughIdxS = idxS(troughIdxS) + 1;
+
+        % Map back to theta index space
+        theta_segIdxS = troughIdx(troughIdxS + 1); % I tried to start the segment
+        % after some cycles when a new file starts, however, the change in
+        % temperature is significant as compare the the last cycle of the last file,
+        % which creats steps in theta, and not good results achieved.
 end
-
-val_segE = valE(troughIdxE);
-
-segIdxE_filtered = idxE(troughIdxE);
-
-% Map back to theta index space
-theta_segIdxE = troughIdx(segIdxE_filtered);
-
-% Remove closely spaced jumps
-theta_segIdxE = theta_segIdxE([true; diff(theta_segIdxE) > 20]);
-
-% Segment boundaries
-theta_segIdxE = [theta_segIdxE; numel(theta)];
-
-% ---------------------------------- Finding segment start indices
-idxS = find(DD_troughVals < -ThreshTroughTheta);
-valS = DD_troughVals(idxS);
-troughIdxS = false(size(valS));
-troughIdxS(1) = true;        % always keep first value
-
-currentValS = valS(1);
-
-for k = 2:length(valS)
-    if valS(k) < currentValS
-        troughIdxS(k) = true;
-        currentValS = valS(k);   % update reference
-    end
-end
-
-troughIdxS = idxS(troughIdxS) + 1;
-
-% Map back to theta index space
-theta_segIdxS = troughIdx(troughIdxS); % + 1);
 
 % Remove closely spaced jumps
 theta_segIdxS = theta_segIdxS([true; diff(theta_segIdxS) > 20]);
@@ -3385,26 +2922,134 @@ theta_segIdxS = theta_segIdxS([true; diff(theta_segIdxS) > 20]);
 % Segment boundaries
 theta_segIdxS = [1; theta_segIdxS];
 
-N_segTheta = numel(theta_segIdxE);
+% Calculate segment lengths
+segLength = theta_segIdxE - theta_segIdxS + 1;
 
-maxNthetaSeg = max(theta_segIdxE - theta_segIdxS + 1);
+% Logical mask for valid segments
+SegLengthCheck = segLength >= 50;
+
+% Keep only valid segments
+theta_segIdxS = theta_segIdxS(SegLengthCheck);
+theta_segIdxE = theta_segIdxE(SegLengthCheck);
+
+N_segTheta = numel(theta_segIdxE);
+% 
+maxNthetaSeg = max(theta_segIdxE - theta_segIdxS + 1); % to find the length of the longest segment
+indices = nan(maxNthetaSeg, N_segTheta);
 thetaSegs = nan(maxNthetaSeg, N_segTheta);
 tThetaSegs = nan(maxNthetaSeg, N_segTheta);
 
 for s = 1:N_segTheta
     idx = theta_segIdxS(s):theta_segIdxE(s);
-    thetaSegs(1:numel(idx), s) = theta(idx);
-    tThetaSegs(1:numel(idx), s) = tTheta(idx);
+    n = numel(idx);
+    indices(1:n, s) = idx;    
+    thetaSegs(1:n, s) = theta(idx);    
+    tThetaSegs(1:n, s) = tTheta(idx);    
 end
 
-thetaSegsVector = thetaSegs(~isnan(thetaSegs));
-tTheta_Seg_Vector = tThetaSegs(~isnan(tThetaSegs));
+indices = indices(~isnan(indices));
 
+thetaC = theta(indices); % Continuous Theta thetaC
+tThetaSegsVector = tTheta(indices);
+thetaSegsVector = theta(indices); % Only for saving purpose; otherwise it is same as thetaC
+
+T_noOffsetC_fatigue = T_noOffset_fatigue(indices);
+TrefUpC_fatigue = T_ref_up(indices);
+TrefBotC_fatigue = T_ref_bottom(indices);
+T0DC_fatigue = T0D_fatigue(indices);
+
+%% =============================================
+% ==============================================
+% ---- Calculating and Plotting Theta Amplitude
+% ==============================================
+theta_MinPeakProminence = 0.03;
+
+% --- Peak detection ---
+[peakVals, peakIdx] = findpeaks(thetaC, ...
+    'MinPeakProminence', theta_MinPeakProminence);
+
+% --- Trough detection ---
+[troughVals_neg, troughIdx] = findpeaks(-thetaC, ...
+    'MinPeakProminence', theta_MinPeakProminence);
+
+troughVals = -troughVals_neg;
+
+% --- Plot raw signal with extrema ---
+figure('Name','Segments: ThetaC Peaks and Troughs');
+plot(thetaC, 'k', 'LineWidth', 1.2); hold on;
+title(sprintf('Segments: ThetaC Peaks and Troughs %s', test_details))
+
+plot(peakIdx, peakVals, 'ro', 'MarkerFaceColor', 'r');
+plot(troughIdx, troughVals, 'bo', 'MarkerFaceColor', 'b');
+
+xlabel('Frame Index');
+ylabel('\theta (K)');
+legend('\theta', 'Peaks', 'Troughs','Location', 'northwest');
+grid on;
+set(gcf,'Position',[600 200 580 450])
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');
+figureName = strrep(figureName, ' ', '_');
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% =========================================================
+% --- TRUNCATION
+% =========================================================
+
+mylength = min(numel(peakVals), numel(troughVals));
+
+peakVals_trim   = peakVals(1:mylength);
+troughVals_trim = troughVals(1:mylength);
+
+% =========================================================
+% --- AMPLITUDE COMPUTATION ---
+% =========================================================
+
+thetaAmplitude = (peakVals_trim - troughVals_trim) / 2;
+
+% =========================================================
+% --- PLOT RESULTS ---
+% =========================================================
+
+figure('Name','ThetaC Amplitude');
+plot(thetaAmplitude, 'm', 'LineWidth', 1.5);
+
+title(sprintf('ThetaC and ThetaC Amplitude %s', test_details));
+xlabel('Cycle Index');
+ylabel('Temperature / Amplitude (K)');
+legend('\theta_a','Location', 'northwest');
+grid on;
+set(gcf,'Position',[600 200 580 450])
+
+%
+peakIdx_trim    = peakIdx(1:mylength);
+thetaAmplitudeFull = NaN(size(thetaC));
+thetaAmplitudeFull(peakIdx_trim) = thetaAmplitude;
+
+figure('Name','ThetaC with Cycle-wise Amplitude');
+yyaxis left
+plot(thetaC, 'k', 'LineWidth', 1.2);
+ylabel('\theta (K)');
+
+yyaxis right
+plot(thetaAmplitudeFull, 'mo', ...
+    'LineWidth', 1.5, ...
+    'MarkerFaceColor', 'm');
+ylabel('Cycle Temperature Amplitude (K)');
+
+title(sprintf('ThetaC and Cycle-wise Amplitude %s', test_details));
+xlabel('Frame Index');
+grid on;
+
+legend('\theta', '\theta Amplitude', 'Location', 'northwest');
+set(gcf,'Position',[600 200 580 450])
 
 %% ------------------- Segmentation of force
 
-minProminence = 150;        % force prominence Newoton
-minSegGap = 300;           % minimum gap in samples (choose properly)
+% minProminence = 150;        % force prominence Newoton
+minSegGap = 300;           % minimum gap in samples 
 
 F_fatigue = F_fatigue(:);
 
@@ -3435,7 +3080,7 @@ F_segE_Idx = [Fpk_loc(Fpk_segIdxE); numel(F_fatigue)];
 
 F_fatigue = F_fatigue(:);
 
-figure;
+figure('Name','Segments: Force Segments Start End');
 plot(F_fatigue, 'k', 'LineWidth', 1.2);
 hold on;
 
@@ -3471,8 +3116,1955 @@ for s = 1:N_segF
 end
 
 tF_Seg_Vector = tFSegs(~isnan(tFSegs));
+ForceC = ForceSegs(~isnan(ForceSegs));
+
+
+
+%% $$$$$$$$$$$$$$$$$$$$          Continuous             $$$$$$$$$$$$$$$$$$$$$$
+% !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+% ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+%----------- Continuous Force and Theta
+% figure('Name','Continuous Force and Theta')
+% plot(tF_Seg_Vector,ForceSegsVector); grid
+% title(sprintf('Continuous Force and Theta - %s', test_details))
+% ylabel('Force (N)')
+% hold on
+% yyaxis right
+% tTheta_Seg_VectorX = tTheta_Seg_Vector - tTheta_Seg_Vector(1); % to synchronize with force time
+% plot(tTheta_Seg_VectorX,thetaSegsVector)
+% ylabel('\theta (K)')
+% xlabel('Time (s)')
+% legend('Force','\theta')
+
+
+% --------------- Building new time vectors for force and theta
+
+tFC = (0:1/SF_F:(numel(ForceC)-1)/SF_F) + tF_fatigue(1); %tTheta(1);
+tFC = tFC(:);
+% tThetaC = 0:1/SF:(numel(thetaC)-1)/SF;
+% tThetaC = (0:1/SF:(numel(thetaC)-1)/SF) + tTheta(1); % to synch with the experimental temperature time
+tThetaC = linspace(tTheta(1), tFC(end), numel(thetaC));
+tThetaC = tThetaC(:);
+
+% ----------- Continuous Force and Theta
+figure('Name','Continuous Force and Theta')
+plot(tFC,ForceC); grid
+title(sprintf('Continuous Force and Theta - %s', test_details))
+ylabel('Force (N)')
+hold on
+yyaxis right
+tTheta_CX = tThetaC ;%- tThetaC(1); % to synchronize with force time
+plot(tTheta_CX,thetaC)
+ylabel('\theta (K)')
+xlabel('Time (s)')
+legend('Force','\theta')
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% --------------- Continuous: Stress Amplitude from Continuous Force
+
+[FpkC, locs_FpkC] = findpeaks(ForceC, 'MinPeakProminence', minProminence);
+t_FpkC = tFC(locs_FpkC);
+
+
+[FtrC, locs_FtrC] = findpeaks(-ForceC, 'MinPeakProminence', minProminence);
+FtrC = -FtrC;
+t_FtrC = tFC(locs_FtrC);
+
+n = min(numel(FpkC), numel(FtrC));
+FpkC = FpkC(1:n);
+FtrC = FtrC(1:n);
+t_FpkC = t_FpkC(1:n);
+t_FtrC  = t_FtrC(1:n);
+
+% ================================================================================
+% Calculating slope of high and low forces for the Stress amplitude calculation
+
+% Robust linear regression
+[bH, statsH] = robustfit(t_FpkC(:), FpkC(:));
+[bL, statsL] = robustfit(t_FtrC(:), FtrC(:));
+
+% Extract slope/intercept
+aH_C = bH(1);
+mH_C = bH(2);
+
+aL_C = bL(1);
+mL_C = bL(2);
+
+% Residuals
+resH = statsH.resid;
+resL = statsL.resid;
+
+% RMSE
+RMSE_H = round(sqrt(mean(resH.^2)),2);
+RMSE_L = round(sqrt(mean(resL.^2)),2);
+
+fprintf('RMSE (Highs): %.2f N\n', RMSE_H);
+fprintf('RMSE (Lows) : %.2f N\n', RMSE_L);
+
+% Fitted lines
+Fhigh_fitC = mH_C * tFC + aH_C;
+Flow_fitC  = mL_C * tFC + aL_C;
+
+% R² calculation
+SS_res_H = sum((FpkC - (aH_C + mH_C*t_FpkC)).^2);
+SS_tot_H = sum((FpkC - mean(FpkC)).^2);
+R2_H = 1 - SS_res_H/SS_tot_H;
+
+SS_res_L = sum((FtrC - (aL_C + mL_C*t_FtrC)).^2);
+SS_tot_L = sum((FtrC - mean(FtrC)).^2);
+R2_L = 1 - SS_res_L/SS_tot_L;
+
+figure('Name', 'Continuous: Robust Linear Force Fits');
+hold on; grid on;
+
+% Plot data
+scatter(t_FpkC, FpkC, 40, 'r', 'filled');
+scatter(t_FtrC,  FtrC,  40, 'b', 'filled');
+
+% Plot fits
+plot(tFC, Fhigh_fitC, '-g', 'LineWidth', 2);
+plot(tFC, Flow_fitC,  '-m', 'LineWidth', 2);
+
+xlabel('Time');
+ylabel('Force');
+title(sprintf('Continuous: Robust Linear Fits for F_{high} and F_{low} - %s', test_details));
+
+legend('Fhighs data','Flows data','High fit','Low fit','Location', 'northwest');
+
+% Get axes limits
+ax = gca;
+xMin = ax.XLim(1);
+xMax = ax.XLim(2);
+yMin = ax.YLim(1);
+yMax = ax.YLim(2);
+
+% Offset for text slightly below the top
+yOffset = 0.25*(yMax - yMin);
+
+% Display fit equations below the legend box (northwest)
+text(xMin + 0.02*(xMax-xMin), yMax - yOffset, ...
+    sprintf('Fhighs = %.3f + %.3f*t   \n(R^2 = %.3f)', aH_C, mH_C, R2_H), ...
+    'Color','g','FontSize',12,'VerticalAlignment','top');
+
+text(xMin + 0.02*(xMax-xMin), yMax - 1.5*yOffset, ...
+    sprintf('Flows = %.3f + %.3f*t   \n(R^2 = %.3f)', aL_C, mL_C, R2_L), ...
+    'Color','m','FontSize',12,'VerticalAlignment','top');
+
+hold off;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% --- Compute Force Amplitude ---
+Famp_fitC = (Fhigh_fitC - Flow_fitC)/2;
+
+% --- Compute Stress Amplitude ---
+SampC = Famp_fitC / xarea / 1e6;  % in MPa
+
+%--- Plot Fit Forces ---
+figure('Name','Continuous: Force vs Time');
+hold on; grid on;
+plot(tFC, Fhigh_fitC, '-r', 'LineWidth', 2);
+plot(tFC, Flow_fitC,  '-b', 'LineWidth', 2);
+plot(tFC, Famp_fitC, '-k', 'LineWidth', 2);          % amplitude fit
+xlabel('Time (s)'); ylabel('Force (N)');
+title(sprintf('Continuous: Fhighs, Flows, Famp vs Time - %s', test_details));
+legend('Fhigh fit','Flow fit','Famp fit','Location','northwest');
+hold off;
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% --- Plot Stress -----
+figure('Name','Continuous: Stress vs Time');
+hold on; grid on;
+plot(tFC, Fhigh_fitC/xarea/1e6, '-r', 'LineWidth', 2);
+plot(tFC, Flow_fitC/xarea/1e6,  '-b', 'LineWidth', 2);
+plot(tFC, SampC, '-k', 'LineWidth', 2);          % amplitude fit
+xlabel('Time (s)'); ylabel('Stress (MPa)');
+title(sprintf('Continuous: Stress vs Time - %s', test_details));
+legend('Shighs','Slows','Samp','Location','northwest');
+hold off;
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+% Interpolate stress amplitude to theta time vector
+SampCinterp = interp1(tFC, SampC, tThetaC, 'linear');
+SampCinterp = SampCinterp(:);
+
+dSamp = SampInterp(1) - SampCinterp(1);
+
+if dSamp > 0
+    SampCinterp = SampCinterp + dSamp;
+elseif dSamp < 0
+    SampInterp = SampInterp + abs(dSamp);
+end
+
+figure('Name','Checking Samp interpolation')
+plot(tFC, SampC, LineWidth=2);
+title('Checking Continuous Samp Interpolation', test_details)
+hold on;
+plot(tThetaC,SampCinterp, '--r',LineWidth=2);
+legend ('SampC','SampC interpolated','Location', 'northwest');
+ylabel('Stess Amplitude (MPa)')
+xlabel('Time (s)')
+grid on
+hold off;
+
+
+%% Continuous: mechanical dissipation d1 calculation using continuous theta
+THSxx = nan(length(thetaC),3);
+d1Cxx = nan(length(thetaC),3);
+D1Cxx = nan(length(thetaC),3);
+meanThetaC = nan(length(thetaC),3);
+count = 0;
+for myWindowSize = 1:4:9     % Window size in sec
+    count = count + 1;
+SFnewDissipationC = round(myWindowSize * SF, 9);
+
+movmean_thetaC = movmean(thetaC, SFnewDissipationC, 'endpoints','fill');
+meanThetaC(:,count) = movmean_thetaC;
+
+
+% Continuous: Calculation of averaged Thermoelastic heat source S_TE
+% Formula: STE = rho * C * ( d(movmean_thetaC_initial)/dt + (movmean_thetaC_initial)/tau )
+
+% -------------------- Time derivative --------------------
+d_movmean_thetaC = gradient(movmean_thetaC, tThetaC);
+
+% % -------------------- INPUTS --------------------
+% t_limitS = 30.6;   % corresponding to 30 MPa
+% t_limitE = 66.775;   % corresponding to 57.465 MPa
+% 
+% % -------------------- STEP 3: Limit to thermoelastic region --------------------
+% idx_limit = (tThetaC >= t_limitS) & (tThetaC <= t_limitE);
+
+
+% -------------------- INPUTS --------------------
+Samp_limitS = min(SampCinterp);   % MPa % start of test
+Samp_limitE = 35;                 % MPa % This is the stress amplitude point (~35 MPa) where specimen thermoelastic cooling stopped and temperature stablised. See the theta and Averaged-theta vs Samp plot
+
+% -------------------- STEP 3: Limit to thermoelastic region --------------------
+idx_limit = (SampCinterp >= Samp_limitS) & ...
+            (SampCinterp <= Samp_limitE);
+
+% -------------------- STEP 4: Remove NaNs --------------------
+valid = idx_limit & ~isnan(movmean_thetaC) & ~isnan(d_movmean_thetaC);
+
+theta_valid = movmean_thetaC(valid);
+dtheta_valid = d_movmean_thetaC(valid);
+
+% -------------------- STEP 5: Instantaneous STE --------------------
+STE_inst = rho * C * ( dtheta_valid + theta_valid ./ tau );
+
+% -------------------- STEP 6: Average STE (HSR estimate) --------------------
+STE_HSR(1,count) = mean(STE_inst, 'omitnan');
+
+% STE_HSR = median(STE_inst);
+
+% -------------------- OUTPUT --------------------
+fprintf('STE_HSR (up to 36 MPa) = %.4f W/m^3\n', STE_HSR);
+
+% % ---------- STE calculation from TSA formula
+% % STE = - alpha * Tinit * d(Samp)/dt
+
+% -------------------- STEP 2: Stress derivative --------------------
+Samp_Pa = SampCinterp * 1e6;
+dSamp_dt = gradient(Samp_Pa, tThetaC);
+
+% -------------------- STEP 3: Valid region --------------------
+valid = idx_limit & ~isnan(dSamp_dt);
+
+% -------------------- STEP 4: Instantaneous STE (vector) --------------------
+Tinit = mean(T0D(Ti_idxS : Ti_idxE));
+STE_TSA_inst = nan(size(tThetaC));
+STE_TSA_inst(valid) = - alpha * Tinit .* dSamp_dt(valid);
+STE_TSA(1,count) = mean(STE_TSA_inst(valid), 'omitnan');
+fprintf('STE_TSA (up to 36 MPa) = %.4f W/m^3\n', STE_TSA);
+
+% % --------- Symmetric percentage difference
+den = (STE_TSA(count) + STE_HSR(count)) / 2;
+valid = den ~= 0;
+perc_diff_sym = nan(size(STE_TSA));
+perc_diff_sym(valid) = (STE_TSA(valid) - STE_HSR(valid)) ./ den(valid) * 100
+
+
+% ------------------------------ tau(theta)  [Continuous Case]
+% Check if tau_table exists and is not empty
+% if exist('tau_table','var') && ~isempty(tau_table)
+% 
+%     % Sort tau table
+%     [tauThetaSorted, idx] = sort(tau_table.Theta);
+%     tauSorted = tau_table.Tau(idx);
+% 
+%     % Initialise tau array
+%     tau_exp = NaN(size(movmean_thetaC));
+% 
+%     % Identify theta bounds
+%     theta_min = tauThetaSorted(1);
+%     theta_max = tauThetaSorted(end);
+% 
+%     % Case 1: theta below minimum -> use minimum tau
+%     idx_low = movmean_thetaC <= theta_min;
+%     tau_exp(idx_low) = tauSorted(1);
+% 
+%     % Case 2: theta above maximum -> use maximum tau
+%     idx_high = movmean_thetaC >= theta_max;
+%     tau_exp(idx_high) = tauSorted(end);
+% 
+%     % Case 3: theta within bounds -> interpolate
+%     idx_mid = ~(idx_low | idx_high);
+%     tau_exp(idx_mid) = interp1( ...
+%         tauThetaSorted, ...
+%         tauSorted, ...
+%         movmean_thetaC(idx_mid), ...
+%         'linear' );
+% 
+%     figure('Name','tau vs movmean ThetaC and tau Theta');
+%     plot(movmean_thetaC, tau_exp, '-r','DisplayName','\tau vs \theta_{mean,C}');
+%     grid on
+%     title('\tau vs \thetaC')
+%     hold on
+%     plot(tau_table.Theta,tau_table.Tau, '.b', 'DisplayName','tau table');
+%     legend
+% 
+% else
+    % ---- for constant tau value ----
+    % tau_exp = tau * ones(size(movmean_thetaC));
+% end
+
+tau_exp = tau * ones(size(movmean_thetaC));
+
+% --------------------------------------- d1C
+% d1C = nan(size(thetaC));
+% kd = (SFnewDissipation - 1) / 2;
+% 
+% for k = SFnewDissipation : length(thetaC) - (SFnewDissipation - 1)
+%     d1C(k) = rho * C * ( ...
+%         (movmean_thetaC(k+kd) - movmean_thetaC(k-kd)) / ...
+%         (tThetaC(k+kd) - tThetaC(k-kd)) + ...
+%         movmean_thetaC(k) / tau_exp(k) );
+% end
+% % DD = d1C/1000;
+% d1C = d1C - STE_HSR; 
+
+THS = nan(size(thetaC)); % THS = Total Heat Sources
+kd = (SFnewDissipationC - 1) / 2;
+
+for k = SFnewDissipationC : length(thetaC) - (SFnewDissipationC - 1)
+    THS(k) = rho * C * ( ...
+        (movmean_thetaC(k+kd) - movmean_thetaC(k-kd)) / ...
+        (tThetaC(k+kd) - tThetaC(k-kd)) + ...
+        movmean_thetaC(k) / tau_exp(k) );
+end
+
+THSxx(:,count) = THS/1000; % Converting units into kilo
+
+d1C = THS - STE_HSR(1,count); 
+d1C = d1C/1000; % Converting units into kilo
+d1Cxx(:,count) = d1C;
+
+D1C = d1C / LF; % Normalize by loading frequency
+D1Cxx(:,count) = D1C;
+end
+
+
+%%        Continuous: Dissipatin Plots
+% ----------- SampC, ThetaC vs Time -----
+figure('Name','Continuous: SampC and ThetaC vs Time'); 
+plot(tThetaC, SampCinterp, '-k', LineWidth=3); hold on; % amplitude fit
+ylabel('\sigma_{amp} (MPa)');
+title(sprintf('Continuous: Samp, theta, Avg.Theta vs Time - %s', test_details));
+yyaxis right
+plot(tThetaC, thetaC, '-r', LineWidth=3); grid on; 
+plot(tThetaC, meanThetaC(:,1),'-r', linewidth= 2); 
+plot(tThetaC, meanThetaC(:,2),'g-',linewidth= 2); 
+plot(tThetaC, meanThetaC(:,3),'-b',linewidth= 2); 
+xlabel('Time (s)'); ylabel('\theta (K)');
+legend('\sigma_{amp}','\theta','\theta_{avg-1s}','\theta_{avg-5s}','\theta_{avg-9s}','Location','northwest');
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ------------------ thetaC, Avg.ThetaC vs SampC
+figure('Name', 'Continuous: theta, Avg.Theta vs SampC');
+plot(SampCinterp, thetaC, '-r', LineWidth=5); hold on; %
+plot(SampCinterp, meanThetaC(:,1),'-k', linewidth= 2); grid
+plot(SampCinterp, meanThetaC(:,2),'g-',linewidth= 2); 
+plot(SampCinterp, meanThetaC(:,3),'-b',linewidth= 2); 
+xlabel('\sigma_{amp} (MPa)');
+ylabel('(\theta) (K)');
+title(sprintf('Continuous: Theta, Averged theta vs Stress Amplitude - %s', test_details));
+legend('\theta','\theta_{avg-1s}','\theta_{avg-5s}','\theta_{avg-9s}','Location','northwest');
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ------------------ THS & stress amplitude vs Time
+figure('Name','Continuous: THS and SampC vs Time')
+plot(tThetaC, THSxx(:,1),'-r', linewidth= 5); grid
+hold on
+plot(tThetaC, THSxx(:,2),'g-',linewidth= 2); 
+plot(tThetaC, THSxx(:,3),'-b',linewidth= 2); 
+title(char(sprintf('Continuous: THS, and Samp vs Time - %s', test_details)));
+ylabel('Total Heat Source ⟨s⟩ (kW·m^{-3})');
+xlabel('Time (s)')
+yyaxis right;
+plot(tFC, SampC, '-.m', LineWidth=2)
+ylabel('\sigma_{amp} (MPa)');
+ax = gca;
+ax.YAxis(2).Color = 'm';
+legend('THS_{1s}','THS_{5s}','THS_{9s}', '\sigma_{amp}','Location', 'northwest');
+grid on;
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ---------------- THS vs SampC
+figure('Name', 'Continuous: THS vs Samp');
+plot(SampCinterp, THSxx(:,1),'-k', linewidth= 2); grid
+hold on
+plot(SampCinterp, THSxx(:,2),'g-',linewidth= 2); 
+plot(SampCinterp, THSxx(:,3),'-b',linewidth= 2); 
+xlabel('\sigma_{amp} (MPa)');
+ylabel('Total Heat Source ⟨s⟩ (kW·m^{-3})');
+title(sprintf('Total Heat Source vs Stress Amplitude - %s', test_details));
+legend('THS_{1s}','THS_{5s}','THS_{9s}', 'Location', 'northwest');
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ---------------- d1C vs SampC
+figure('Name', 'Continuous: d1C vs SampC');
+plot(SampCinterp, d1Cxx(:,1),'-r', linewidth= 2); grid
+hold on
+plot(SampCinterp, d1Cxx(:,2),'g-',linewidth= 2); 
+plot(SampCinterp, d1Cxx(:,3),'-b',linewidth= 2); 
+xlabel('\sigma_{amp} (MPa)');
+ylabel('Mechanical Dissipation ⟨d_1⟩ (kW·m^{-3})');
+title(sprintf('Continuous: d_1 vs Stress Amplitude - %s', test_details));
+legend('d_1_{-1s}','d_1_{-5s}','d_1_{-9s}', 'Location', 'northwest');
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ---------------- D1C vs SampC
+figure('Name', 'Continuous: D1C vs Samp');
+plot(SampCinterp, D1Cxx(:,1),'.r', linewidth= 2); grid
+hold on
+plot(SampCinterp, D1Cxx(:,2),'.g',linewidth= 2); 
+plot(SampCinterp, D1Cxx(:,3),'.b',linewidth= 2); 
+xlabel('\sigma_{amp} (MPa)');
+ylabel('Mechanical Dissipation per Cycle ⟨D_1⟩ (kJ·m^{-3}/cycle)');
+title(sprintf('Continuous: D_1 vs Stress Amplitude - %s', test_details));
+legend('D_1_{-1s}','D_1_{-5s}','D_1_{-9s}', 'Location', 'northwest');
+set(gcf, 'Position', [688 535 580 450])
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ylabel('Heat Density per Cycle ⟨{\its}_{c}⟩ (kJ·m^{-3}/cycle)', 'Interpreter', 'tex')
+%% Continuous: d1 and D1 Plotting section
+
+% --- d1 & stress amplitude vs Time
+figure('Name','Continuous: d1C and SampC vs Time')
+plot(tThetaC, d1C, '.b', 'LineWidth', 1.5); % in kW/m3
+title(char(sprintf('Continuous: d1, and Samp vs Time (%0.0fs Window) %s', ...
+    windowDissipation, test_details)));
+ylabel('d1 - Mechanical Dissipation (kW/m^3)');
+xlabel('Time (s)')
+yyaxis right;
+plot(tFC, SampC, '-.m', LineWidth=2)
+ylabel('Stress Amplitude (MPa)');
+ax = gca;
+ax.YAxis(2).Color = 'm';
+legend('d1', '\sigma_{amp}','Location', 'northwest');
+grid on;
+
+% --- Save figure ---
+% figTitle = get(get(gca, 'Title'), 'String');
+% figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+% figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+% saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+% ---- d1, Theta, and Avg.Theta vs stress amplitude
+figure('Name','Continuous: d1C, Theta, and Avg.Theta  vs SampC')
+plot(SampCinterp, thetaC,'-r');%, linewidth = 2)
+hold on
+plot(SampCinterp, movmean_thetaC, '-g', linewidth = 1.5)
+ylabel('\theta (K)')
+xlabel('\sigma_{amp} (MPa)');
+
+yyaxis right
+plot(SampCinterp, d1C, '.b');
+title(char(sprintf('Continuous: d1C, theta, and Avg. theta vs Samp (%0.0fs Window) %s', windowDissipation, test_details)));
+ylabel('d1 - Mechanical Dissipation (kW/m^3)');
+ax = gca;
+ax.YAxis(2).Color = 'b';
+legend('\theta','Avg. \theta','d1','Location','northwest')
+% legend('d1', '\theta','Location','northwest')
+grid on;
+
+% --- Save figure ---
+% figTitle = get(get(gca, 'Title'), 'String');
+% figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+% figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+% saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% % ---- d1 and diff(Avg. Theta) vs stress amplitude
+figure('Name','Continuous: d1C and diff(Avg.Theta) vs SampC');
+plot(SampCinterp(2:end), diff(movmean_thetaC), '-r', linewidth = 1)
+ylabel('diff (Avg.\theta)  (K)')
+title(sprintf('Continuous: d1 and diff (Avg.theta) vs Samp (%0.0fs Window) %s', windowDissipation, test_details));
+xlabel('\sigma_{amp} (MPa)');
+yyaxis right
+plot(SampCinterp, d1C, '.b');
+ylabel('d1 - Sum of Heat Sources (kW/m^3)');
+ax = gca;
+ax.YAxis(2).Color = 'b';
+legend('diff (Avg.\theta)','d1', 'Location','northwest')
+grid on;
+% --- Save figure ---
+% figTitle = get(get(gca, 'Title'), 'String');
+% figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+% figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+% saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ---- D1, Theta, and Avg.Theta vs stress amplitude
+figure('Name','Continuous: D1C, Theta, and Avg.Theta  vs SampC')
+plot(SampCinterp, thetaC,'-r');%, linewidth = 2)
+hold on
+plot(SampCinterp, movmean_thetaC, '-g', linewidth = 1.5)
+ylabel('\theta (K)')
+xlabel('\sigma_{amp} (MPa)');
+
+yyaxis right
+plot(SampCinterp, D1C, '.b');
+title(sprintf('Continuous: D1C, theta, and Avg.theta vs Samp (%0.0fs Window) %s', windowDissipation, test_details));
+ylabel('Mechanical Dissipation - D1 (kJ·m^{-3}/cycle)');
+ax = gca;
+ax.YAxis(2).Color = 'b';
+legend('\theta','Avg. \theta','D1C','Location','northwest')
+% legend('d1', '\theta','Location','northwest')
+grid on;
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+% ----- d1, d1C
+% figure('Name','d1, d1C vs Samp')
+% plot(SampInterp,d1,'-b', LineWidth=2)
+% hold on;
+% plot(SampCinterp,d1C,'-k', LineWidth=1.5)
+% grid on
+% title(sprintf('d1, d1C vs \sigma_{amp} (%0.0fs Window) %s', windowDissipation, test_details));
+% xlabel('\sigma_{amp} (MPa)')
+% ylabel('d1 (kW/m³)')
+% legend ('d1','d1C',Location='northwest')
+
+% ----- D1, D1C
+figure('Name','D1, D1C vs Samp')
+plot(SampInterp,D1,'-b', LineWidth=2)
+hold on;
+plot(SampCinterp,D1C,'-k', LineWidth=1.5)
+grid on
+title(sprintf('D1, D1C vs \\sigma_{amp} (%0.0fs Window) %s', windowDissipation, test_details));
+xlabel('\sigma_{amp} (MPa)')
+ylabel('D1 (kJ·m^{-3}/cycle)')
+legend ('D1','D1C',Location='northwest')
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% Continuous: Frequency Analysis of Theta of Loading Period
+N_IRfatigueC = length(thetaC);
+
+N_IRfatigueCTrunc = N_IRfatigueC; % Finding the maximum length of data which has integer number of cycles
+
+while abs(mod(N_IRfatigueCTrunc, SF / LF)) > 1e-6
+    N_IRfatigueCTrunc = N_IRfatigueCTrunc -1;
+end
+
+% --------- Frequency vector
+f_fatigueC = (0:floor(N_IRfatigueCTrunc/2)) * (SF / N_IRfatigueCTrunc);
+f_fatigueC = f_fatigueC(:);
+
+TrefUpC_fatigueTrunc = TrefUpC_fatigue(1:N_IRfatigueCTrunc);
+TrefBotC_fatigueTrunc = TrefBotC_fatigue(1:N_IRfatigueCTrunc); 
+T0DC_fatigueTrunc = T0DC_fatigue(1:N_IRfatigueCTrunc); 
+thetaCtrunc = thetaC(1:N_IRfatigueCTrunc); 
+
+% --------- Apply Hann window
+applyHANN_fatigueC = hann(N_IRfatigueCTrunc);
+applyHANN_fatigueC = applyHANN_fatigueC(:);
+
+CG_fatigueC = mean(applyHANN_fatigueC); % Coherent gain
+
+TrefUpC_fatigueHANN = TrefUpC_fatigueTrunc.* applyHANN_fatigueC;
+TrefBotC_fatigueHANN = TrefBotC_fatigueTrunc.* applyHANN_fatigueC;
+T0DC_fatigueHANN = T0DC_fatigueTrunc.* applyHANN_fatigueC;
+thetaC_HANN = thetaCtrunc.* applyHANN_fatigueC;
+
+
+
+% --------- FFT computation TrefUp_fatigue
+P1TrefUpC_fatigue = abs(fft(TrefUpC_fatigueHANN, N_IRfatigueCTrunc)) * (2/(N_IRfatigueCTrunc * CG_fatigueC));
+P1TrefUpC_fatigue = P1TrefUpC_fatigue(1 : floor(N_IRfatigueCTrunc/2)+1);
+P1TrefUpC_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation TrefBot_fatigue
+P1TrefBotC_fatigue = abs(fft(TrefBotC_fatigueHANN, N_IRfatigueCTrunc)) * (2/(N_IRfatigueCTrunc * CG_fatigueC));
+P1TrefBotC_fatigue = P1TrefBotC_fatigue(1 : floor(N_IRfatigueCTrunc/2)+1);
+P1TrefBotC_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation T0DC
+P1T0DC_fatigue = abs(fft(T0DC_fatigueHANN, N_IRfatigueCTrunc)) * (2/(N_IRfatigueCTrunc * CG_fatigueC));
+P1T0DC_fatigue = P1T0DC_fatigue(1 : floor(N_IRfatigueCTrunc/2)+1);
+P1T0DC_fatigue(1) = NaN; % Remove DC component
+
+% --------- FFT computation thetaC
+P1thetaC = abs(fft(thetaC_HANN, N_IRfatigueCTrunc)) * (2/(N_IRfatigueCTrunc * CG_fatigueC));
+P1thetaC = P1thetaC(1 : floor(N_IRfatigueCTrunc/2)+1);
+P1thetaC(1) = NaN; % Remove DC component
+
+figure('Name', 'Continuous: Frequency analysis IR data FATIGUE'); hold on
+title(sprintf('Continuous: Frequency analysis IR data FATIGUE (110 Hz) - %s', test_details));
+
+
+% Harmonic markers
+xline(20,'--k','1f','FontSize',22);
+xline(40,'--k','2f','FontSize',22);
+xline(60,'--k','3f','FontSize',22);
+xline(80,'--k','4f','FontSize',22);
+xline(100,'--k','5f','FontSize',22);
+
+plot(f_fatigueC, movmean(P1T0DC_fatigue,3),'o', 'Color', 'r', 'MarkerSize', 2, ...
+    'MarkerFaceColor', 'r', 'MarkerEdgeColor', 'r', 'DisplayName', 'T_{GZ}');
+
+plot(f_fatigueC, movmean(P1TrefBotC_fatigue,3),'o', 'Color', 'g', 'MarkerSize', 2, ...
+    'MarkerFaceColor', 'g', 'MarkerEdgeColor', 'g', 'DisplayName', 'T_{RefLow}');
+
+plot(f_fatigueC, movmean(P1TrefUpC_fatigue,3),'o', 'Color', 'b', 'MarkerSize', 2, ...
+    'MarkerFaceColor', 'b', 'MarkerEdgeColor', 'b', 'DisplayName', 'T_{RefUp}');
+
+
+% plot(f_fatigueC, movmean(P1thetaC,3),'o', 'Color', 'k', 'MarkerSize', 3, ...
+%     'MarkerFaceColor', 'k', 'MarkerEdgeColor', 'k', 'DisplayName', '\theta');
+
+xlabel('Frequency (Hz)', 'FontSize', 20)
+ylabel('Amplitude', 'FontSize', 20)
+
+set(gca, 'YScale', 'log');
+ylim([1e-6 1e-1])
+yticks([1e-6 1e-5 1e-4 1e-3 1e-2 1e-1])
+yticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}'})
+
+xlim([0 110])
+xticks(0:10:ceil(SF/2/100)*100)
+
+grid on;
+ax = gca;
+ax.YMinorGrid = 'on';
+ax.GridAlpha = 0.5;
+ax.MinorGridAlpha = 0.3;
+
+set(gcf, 'Position', [688 535 657 480])
+set(gca, 'FontSize', 20)
+set(gcf,'MenuBar','figure','ToolBar','figure');
+
+% legend
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% 3D plot - Continuous: Fatigue 3D
+% close all;
+
+% Create grid: frequency repeated for each variable
+nFreqFatigueC = length(f_fatigueC);
+X = repmat(f_fatigueC(:), 1, 3);           % X = frequency
+Y = repmat(1:3, nFreqFatigueC, 1);                % Y = variable index (1 to 4)
+Z = [P1TrefUpC_fatigue(:), P1TrefBotC_fatigue(:), P1T0DC_fatigue(:)]; % Z = amplitudes
+
+figure('Name', 'Continuous: Frequency Analysis Fatigue Region');
+
+myMarkerSize = 2.5;
+
+% Plot 3D stems with different colors
+stem3(X(:,1), Y(:,1), Z(:,1), 'bo', 'filled', ...
+      'MarkerSize', myMarkerSize, 'LineStyle', 'none'); hold on;
+stem3(X(:,2), Y(:,2), Z(:,2), 'go', 'filled', ...
+      'MarkerSize', myMarkerSize, 'LineStyle', 'none');
+stem3(X(:,3), Y(:,3), Z(:,3), 'ro', 'filled', ...
+      'MarkerSize', myMarkerSize, 'LineStyle', 'none');
+
+title(sprintf('Continuous: Frequency Analysis Fatigue Region - %s', test_details));
+xlabel('Frequency (Hz)');
+
+zlabel('Amplitude');
+set(gca, 'ZScale', 'log');
+zlim([1e-6 1e-1])
+
+% Nice axis labels
+yticks(1:3);
+yticklabels({'T_{RefUp}', 'T_{RefLow}', 'T_{GZ}'});
+
+xlim([0 110]);
+xticks(0:10:110)
+% zlim([0 2.5]);
+grid on;
+
+view(45, 35);           % Good default 3D angle (change to taste: e.g. 30,40 or -40,30)
+legend('Location', 'bestoutside');
+
+set(gca, 'FontSize', 20);
+
+zticks([1e-6 1e-5 1e-4 1e-3 1e-2 1e-1])
+zticklabels({'10^{-6}','10^{-5}','10^{-4}','10^{-3}','10^{-2}','10^{-1}'})
+set(gcf,'MenuBar','figure','ToolBar','figure');
+
+% ------------------- Save Figure
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% Continuous: FFT on sliding windows
+
+N_thetaC = length(thetaC);
+
+% Aliasing check
+if LF3 > SF/2
+    warning(['\n################################\n' ...
+        'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
+        '################################'], LF3, SF/2);
+end
+
+% --- Arbitrary frequencies ---
+fA = LF - 3;
+fB = LF + 2;
+fC = LF + LF/2; %FL - 5;
+fD = LF*2 - 2 ; %FL + 5;
+fE = LF*2 + 2; %FL*2 - 5;
+fF = LF*2 + 13; %FL*2 + 5;
+arbitraryFreqs = [fA, fB, fC, fD, fE, fF];
+
+% --- FFT frequency axis ---
+f = (0:SFnewTSA-1) * (SF/SFnewTSA);
+nWinThetaC = N_thetaC - SFnewTSA + 1; % # of windows in the whole theta vector
+tplot = tThetaC(1:nWinThetaC);
+tplot = tplot(:);
+% loading window
+loading_start = tThetaC(1);%(idx_Theta_sync(1));
+loading_end = tThetaC(end); %(temp_idxE - SF*window);
+loading_window = find(tplot >= loading_start & tplot <= loading_end);
+
+% ###########################
+% ###########################
+SampCinterp_x = SampCinterp(1:nWinThetaC);
+SampCinterp_x = SampCinterp_x(:);
+
+% ###########################
+% ###########################
+
+% --- Preallocate ---
+maxAmpH1C = nan(nWinThetaC,1); maxFreqH1C = nan(nWinThetaC,1); ampAtH1C = nan(nWinThetaC,1); % ampAtH1C = Amplitude At H1 Continuous theta data
+maxAmpH2C = nan(nWinThetaC,1); maxFreqH2C = nan(nWinThetaC,1); ampAtH2C = nan(nWinThetaC,1);
+maxAmpH3C = nan(nWinThetaC,1); maxFreqH3C = nan(nWinThetaC,1); ampAtH3C = nan(nWinThetaC,1);
+ampAtArbitC = nan(nWinThetaC, length(arbitraryFreqs));
+
+
+% --- Sliding window ---
+%% --- Continuous: SHTSA FFT method
+
+% --------- Precompute Hann window and coherent gain
+applyHANN = hann(SFnewTSA);
+applyHANN = applyHANN(:);
+CG = mean(applyHANN);
+
+for k = 1:nWinThetaC
+
+    end_idx = k+SFnewTSA-1;
+
+    segmentC = detrend(thetaC(k : end_idx), 6);
+    % segment = detrend(theta(k : end_idx), 1);
+    % segment = thetaC(k : end_idx);
+
+    segmentC = segmentC(:);
+
+    % --------- Apply Hann window
+    segmentHANN = segmentC .* applyHANN;
+
+    % --------- FFT with amplitude correction
+    beta = abs(fft(segmentHANN)) * (2/(SFnewTSA * CG));
+
+    % --------- First harmonic (1f)
+    idx1 = find(f >= (LF-BW) & f <= (LF+BW));
+    [maxAmpH1C(k), j1] = max(beta(idx1)); maxFreqH1C(k) = f(idx1(j1));
+    [~, i1] = min(abs(f - LF)); ampAtH1C(k) = beta(i1);
+
+    % --------- Second harmonic (2f)
+    idx2 = find(f >= (LF2-BW) & f <= (LF2+BW));
+    [maxAmpH2C(k), j2] = max(beta(idx2)); maxFreqH2C(k) = f(idx2(j2));
+    [~, i2] = min(abs(f - LF2)); ampAtH2C(k) = beta(i2);
+
+    % --------- Third harmonic (3f)
+    if LF3 < SF/2
+        idx3 = find(f >= (LF3-BW) & f <= (LF3+BW));
+        [maxAmpH3C(k), j3] = max(beta(idx3)); maxFreqH3C(k) = f(idx3(j3));
+        [~, i3] = min(abs(f - LF3)); ampAtH3C(k) = beta(i3);
+    end
+
+    % --------- Arbitrary frequencies
+    for j = 1:length(arbitraryFreqs)
+        [~, idx] = min(abs(f - arbitraryFreqs(j)));
+        ampAtArbitC(k, j) = beta(idx);
+    end
+
+end
+
+% --- Construct central time reference for overlaying theta ---
+winCentreIdx = (1:nWinThetaC) + floor(SFnewTSA/2);
+
+%% --- Continuous: Plots of Amplitudes from FFT method ---
+
+% --------- Continuous: Harmonic Amplitudes and Theta vs TIME
+figure('Name','Continuous: Harmonic Amplitudes and Theta vs Time'); %,'NumberTitle','off');
+
+nn = 3;
+if LF3>SF/2
+    nn = 2;
+end
+
+subplot(nn,2,1); % ---- in this subplot no average of amplitude as the amplitud is not very noisy
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx), '-b');
+ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right
+ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, ampAtH1C, 'k', 'LineWidth', 3); grid on;
+ylabel('Amp (K)');
+% title(sprintf('Continuous: Amp @ %.f Hz', LF)); grid on;
+title(sprintf('Continuous: Amp @ %0.0f Hz',LF));
+xlabel('Time (s)')
+legend('\theta','Amp', 'Location', 'northwest');
+% legend('Amp', 'Avg. \theta','Location', 'northwest');
+
+subplot(nn,2,2); % ---- in this subplot no average of amplitude as the amplitud is not very noisy
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx), '-b');
+ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right
+ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, maxAmpH1C, 'k', 'LineWidth', 3); grid on
+ylabel('Amp (K)');
+title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz',LF, BW));
+xlabel('Time (s)')
+legend('\theta','Amp', 'Location', 'northwest');
+
+subplot(nn,2,3);
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right
+ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, ampAtH2C, 'g', 'LineWidth', 2);
+hold on;
+plot(tplot, movmean(ampAtH2C, SFnewTSA, 'Endpoints', 'fill'), 'm-', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Amp @ %.f Hz', LF2)); 
+grid on;
+xlabel('Time (s)')
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+
+subplot(nn,2,4);
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right
+ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, maxAmpH2C, 'm', 'LineWidth', 2);
+hold on; plot(tplot, movmean(maxAmpH2C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
+xlabel('Time (s)')
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+if LF3<SF/2
+    subplot(nn,2,5);
+    yyaxis left
+    % plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, thetaC(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(tplot, ampAtH3C, 'y', 'LineWidth', 2);
+    hold on; plot(tplot, movmean(ampAtH3C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+    ylabel('Amp (K)');
+    title(sprintf('Continuous: Amp @ %.f Hz', LF3)); grid on;
+    xlabel('Time (s)')
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+
+    subplot(nn,2,6);
+    yyaxis left
+    % plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, thetaC(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(tplot, maxAmpH3C, 'c', 'LineWidth', 2);
+    hold on; plot(tplot, movmean(maxAmpH3C, SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+    ylabel('Amp (K)');
+    title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
+    xlabel('Time (s)')
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+end
+
+sg = sgtitle(sprintf('Continuous: %.1fs Sliding-Window FFT Harmonic Analysis\n(mean \\theta removed) - %s', windowTSA, test_details));
+
+% --- Save figure ---
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special characters
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+% --------- Continuous: Harmonic Amplitudes and Theta vs Stress amplitude
+figure('Name','Continuous: Harmonic Amplitudes and Theta vs Stress Amp'); %);%,'NumberTitle','off');
+
+subplot(nn,2,1);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, ampAtH1C(loading_window), 'k', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Amp @ %.f Hz', LF)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+% legend('Amp', 'Avg. \theta','Location', 'northwest');
+legend('\theta','Amp','Location', 'northwest');
+
+subplot(nn,2,2);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, maxAmpH1C(loading_window), 'k', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF, BW)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+% legend('Amp','Avg. \theta','Location', 'northwest');
+legend('\theta','Amp','Location', 'northwest');
+
+subplot(nn,2,3);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, ampAtH2C(loading_window), 'g', 'LineWidth', 2);
+hold on;
+plot(SampCinterp_x, movmean(ampAtH2C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Amp @ %.f Hz', LF2)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+subplot(nn,2,4);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, maxAmpH2C(loading_window), 'm', 'LineWidth', 2);
+hold on; plot(SampCinterp_x, movmean(maxAmpH2C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+ylabel('Amp (K)');
+title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+if LF3<SF/2
+    subplot(nn,2,5);
+    yyaxis left
+    % plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(SampCinterp_x, ampAtH3C(loading_window), 'y', 'LineWidth', 2);
+    hold on; plot(SampCinterp_x, movmean(ampAtH3C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+    ylabel('Amp (K)');
+    title(sprintf('Continuous: Amp @ %.f Hz', LF3 )); grid on;
+    xlabel('\sigma_{amp} (MPa)');
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+
+    subplot(nn,2,6);
+    yyaxis left
+    % plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(SampCinterp_x, maxAmpH3C(loading_window), 'c', 'LineWidth', 2);
+    hold on; plot(SampCinterp_x, movmean(maxAmpH3C(loading_window), SFnewTSA, 'Endpoints', 'fill'), '-k', 'LineWidth', 2);
+    ylabel('Amp (K)');
+    title(sprintf('Continuous: Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
+    xlabel('\sigma_{amp} (MPa)');
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+end
+
+sgtitle(sprintf('Continuous: %.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowTSA,test_details));
+
+% --- Save figure ---
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special characters
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+%% --- Continuous: Traditional method
+tref_signal = (0:N_thetaC-1) / SF; %(0:dt:(length(F_continuous)-1)*dt);
+
+X1C = cos(2 * pi * LF * tref_signal)';
+Y1C = sin(2 * pi * LF * tref_signal)';
+
+X2C = cos(2 * pi * 2*LF * tref_signal)';
+Y2C = sin(2 * pi * 2*LF * tref_signal)';
+
+X3C = cos(2 * pi * 3*LF * tref_signal)';
+Y3C = sin(2 * pi * 3*LF * tref_signal)';
+
+for k = 1:nWinThetaC
+
+    end_idx = k+SFnewTSA-1;
+
+    if end_idx > N_thetaC
+        break;
+    end
+
+    kIndices = k : end_idx;
+    kIndices = kIndices(:);
+
+    segmentC = detrend(thetaC(kIndices), 6); 
+    % segmentC = segmentC(:);
+
+    H1_cosC(k) = sum(segmentC .* X1C(kIndices)) / (SFnewTSA/2);
+    H1_sinC(k) = sum(segmentC .* Y1C(kIndices)) / (SFnewTSA/2);
+
+    H2_cosC(k) = sum(segmentC .* X2C(kIndices)) / (SFnewTSA/2);
+    H2_sinC(k) = sum(segmentC .* Y2C(kIndices)) / (SFnewTSA/2);
+
+    H3_cosC(k) = sum(segmentC .* X3C(kIndices)) / (SFnewTSA/2);
+    H3_sinC(k) = sum(segmentC .* Y3C(kIndices)) / (SFnewTSA/2);
+
+    % --------- Amplitudes
+    AmpH1_windowC(k) = sqrt(H1_sinC(k)^2 + H1_cosC(k)^2);
+    AmpH2_windowC(k) = sqrt(H2_sinC(k)^2 + H2_cosC(k)^2);
+    AmpH3_windowC(k) = sqrt(H3_sinC(k)^2 + H3_cosC(k)^2);
+
+end
+
+
+% ------------------------- plots
+% Combined figure with three subplots for H1, H2, H3 amplitudes
+figure('Name','Continuous: Harmonic Amplitudes and Theta vs time'); %,'NumberTitle','off');
+subplot(nn,1,1);
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx),'-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, AmpH1_windowC, LineWidth=2); grid on; 
+title(sprintf('Continuous: H1 Amplitude at %.f Hz', LF));
+% hold on;
+% plot(tplot, movmean(AmpH1_windowC, smoothing, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+ylabel('Amp (K)'); xlabel('Time (s)');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+% legend('Amp','Avg. \theta','Location', 'northwest');
+% legend('Amp','\theta','Location', 'northwest');
+legend('\theta','Amp','Location', 'northwest');
+
+subplot(nn,1,2);
+yyaxis left
+% plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(tplot, thetaC(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(tplot, AmpH2_windowC); grid on; 
+title(sprintf('Continuous: H2 Amplitude at %.f Hz', LF2));
+hold on;
+plot(tplot, movmean(AmpH2_windowC, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+ylabel('Amp (K)'); xlabel('Time (s)');
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+if LF3<SF/2
+    subplot(nn,1,3);
+    yyaxis left
+    % plot(tplot, movmean(thetaC(winCentreIdx), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(tplot, thetaC(winCentreIdx), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(tplot, AmpH3_windowC); grid on; 
+    title(sprintf('Continuous: H3 Amplitude at %.f Hz', LF3));
+    hold on;
+    plot(tplot, movmean(AmpH3_windowC, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+    ylabel('Amp (K)'); xlabel('Time (s)');
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+end
+
+sg = sgtitle(sprintf('Continuous: %.1fs Sliding-Window Harmonic Analysis using Reference Signals (mean \\theta removed) - %s', windowTSA, test_details));
+
+% --- Save figure ---
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+% ---------------------- Harmonic Amp. and Theta vs Stress Amp
+
+% loading period in temperatue and tTemp: idx_Theta_sync(1):theta_idxE
+% so the time should statrt when time is => than the time value at
+% idx_Theta_sync(1) and ends at when the time value is =< theta_idxE.
+AmpH1_loading = AmpH1_windowC(loading_window);
+AmpH2_loading = AmpH2_windowC(loading_window);
+AmpH3_loading = AmpH3_windowC(loading_window);
+
+
+figure('Name','Continuous: Harmonic Amp. and Theta vs Stress Amp'); %);%,'NumberTitle','off');
+subplot(nn,1,1);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, AmpH1_loading, LineWidth=2); grid on; title(sprintf('Continuous: H1 Amplitude at %.f Hz', LF));
+% hold on;
+% plot(SampInterp, movmean(AmpH1_loading, smoothing, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Location', 'northwest');
+
+
+subplot(nn,1,2);
+yyaxis left
+% plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+plot(SampCinterp_x, AmpH2_loading); grid on; title(sprintf('Continuous: H2 Amplitude at %.f Hz', LF2));
+hold on;
+plot(SampCinterp_x, movmean(AmpH2_loading, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
+% legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+% legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+
+
+if LF3<SF/2
+    subplot(nn,1,3);
+    yyaxis left
+    % plot(SampInterp, movmean(thetaC(loading_window), smoothing, 'Endpoints', 'fill'), 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
+    plot(SampCinterp_x, thetaC(loading_window), '-b'); ylabel('\theta (K)'); ax = gca; ax.YAxis(1).Color = 'b';
+    title(sprintf('Continuous: H3 Amplitude at %.f Hz', LF3));
+    yyaxis right; ax = gca; ax.YAxis(2).Color = 'k';
+    plot(SampCinterp_x, AmpH3_loading, linewidth = 1.2); grid on;
+    hold on;
+    plot(SampCinterp_x, movmean(AmpH3_loading, SFnewTSA, 'Endpoints', 'fill'), 'k-', 'LineWidth', 2);
+    ylabel('Amp (K)'); xlabel('\sigma_{amp} (MPa)');
+    % legend('Amp','Mean Amp', 'Avg. \theta','Location', 'northwest');
+    % legend('Amp','Mean Amp', '\theta','Location', 'northwest');
+    legend('\theta','Amp','Mean Amp', 'Location', 'northwest');
+end
+
+sg = sgtitle(sprintf('Continuous: %.1fs Sliding-Window Harmonic Analysis using Reference Signals\n(mean \\theta removed - %s)', windowTSA, test_details));
+
+% --- Save figure ---
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% Continuous: Least Square Method Harmonics Vs SampC
+% clc
+N_thetaC = length(thetaC);
+tref_signal = (0:N_thetaC-1) / SF;
+tref_signal = tref_signal(:);
+
+applyHANN = hann(SFnewTSA);
+applyHANN = applyHANN(:);
+
+CG = mean(applyHANN);   % --------- ADD THIS
+
+pOrder = 4;
+
+for k = 1:nWinThetaC
+
+    end_idx = k + SFnewTSA - 1;
+    if end_idx > N_thetaC
+        break;
+    end
+
+    kIndices = k:end_idx;
+    kIndices = kIndices(:);
+
+    segmentC = detrend(thetaC(kIndices), pOrder);
+    % segmentC = thetaC(kIndices);
+    segmentC = segmentC(:);
+
+    t_seg = tref_signal(kIndices);
+
+    A = [ ...
+        cos(2*pi*1*LF*t_seg),sin(2*pi*1*LF*t_seg), ...
+        cos(2*pi*2*LF*t_seg),sin(2*pi*2*LF*t_seg), ...
+        cos(2*pi*3*LF*t_seg),sin(2*pi*3*LF*t_seg) ...
+        cos(2*pi*4*LF*t_seg),sin(2*pi*4*LF*t_seg) ...
+        ];
+
+    Aw = A .* applyHANN;
+    yw = segmentC .* applyHANN;
+
+    coeff = Aw \ yw;
+
+    a1 = coeff(1); b1 = coeff(2);
+    a2 = coeff(3); b2 = coeff(4);
+    a3 = coeff(5); b3 = coeff(6);
+    a4 = coeff(7); b4 = coeff(8);
+
+    AmpH1C_LS(k) = sqrt(a1^2 + b1^2); % / CG;
+    AmpH2C_LS(k) = sqrt(a2^2 + b2^2); % / CG;
+    AmpH3C_LS(k) = sqrt(a3^2 + b3^2); % / CG;
+    AmpH4C_LS(k) = sqrt(a4^2 + b4^2); % / CG;
+
+    PhaseH1C_LS(k) = atan2(b1, a1);
+    PhaseH2C_LS(k) = atan2(b2, a2);
+    PhaseH3C_LS(k) = atan2(b3, a3);
+
+end
+AmpH1C_LS = AmpH1C_LS(:);
+AmpH2C_LS = AmpH2C_LS(:);
+AmpH3C_LS = AmpH3C_LS(:);
+AmpH4C_LS = AmpH4C_LS(:);
+
+% --------- Time reference
+winCentreIdx = (1:nWinThetaC) + floor(SFnewTSA/2);
+
+%% Reconstruction of theta from the harmonic amplitudes
+% Estimate a smooth trend of the original signal
+trend = movmean(thetaC, SFnewTSA);   % or smoothdata, or polyfit, etc.
+
+% Reconstruct the harmonics
+recon_osc = zeros(size(thetaC));
+weight    = zeros(size(thetaC));
+
+for k = 1:nWinThetaC
+    end_idx = k + SFnewTSA - 1;
+    if end_idx > N_thetaC, break; end
+    idx   = k:end_idx;
+    t_seg = tref_signal(idx);
+
+    osc = AmpH1C_LS(k) * cos(2*pi*LF  *t_seg - PhaseH1C_LS(k)) ...
+        + AmpH2C_LS(k) * cos(2*pi*2*LF*t_seg - PhaseH2C_LS(k)) ...
+        + AmpH3C_LS(k) * cos(2*pi*3*LF*t_seg - PhaseH3C_LS(k));
+
+    recon_osc(idx) = recon_osc(idx) + osc;
+    weight(idx)    = weight(idx) + 1;
+end
+recon_osc(weight>0) = recon_osc(weight>0) ./ weight(weight>0);
+
+%% Final reconstruction
+recon_theta = trend + recon_osc;
+%
+figure;
+plot(tref_signal, thetaC, 'k', 'LineWidth', 1.5);
+hold on;
+plot(tref_signal, recon_theta, 'r--', 'LineWidth', 1.5);
+
+grid on;
+box on;
+
+xlabel('Time (s)');
+ylabel('\theta');
+
+legend('\theta Original', '\theta Reconstructed', 'Location', 'best');
+
+title('Comparison of Original and Reconstructed \theta');
+
+%% ----------- Continuous: Combined D1, H2 and H3 Paper Figure
+figure('Name','Continuous: D1, H2 & H3 vs Stress');
+grid on
+hold on
+box on
+
+title(sprintf('Continuous: D_1, H2 and H3 vs Stress - porder = %0.0f', pOrder))
+
+% ================= LEFT Y-AXIS =================
+yyaxis left
+
+plot(SampCinterp, D1Cxx(:,2), '-g', 'LineWidth', 2, ...
+    'DisplayName', 'D_1_{-5s}');
+
+ylabel('Mechanical Dissipation per Cycle ⟨\itD\rm_1⟩ (kJ·m^{-3}/cycle)')
+
+ylim([0 100])
+yticks(0:25:100)
+
+set(gca, ...
+    'FontSize', 20, ...
+    'XColor', 'k', ...
+    'YColor', 'k')
+
+% ================= RIGHT Y-AXIS =================
+yyaxis right
+
+h = plot(SampCinterp_x, AmpH3C_LS*1e3, 'ob', ...
+    'MarkerSize', 2, ...
+    'DisplayName', 'H3 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(SampCinterp_x, AmpH2C_LS*1e3, 'or', ...
+    'MarkerSize', 2, ...
+    'DisplayName', 'H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+ylabel('Amplitude (mK)')
+
+ylim([0 4])
+yticks(0:1:4)
+set(gca, ...
+    'FontSize', 20, ...
+    'XColor', 'k', ...
+    'YColor', 'k')
+% ================= COMMON AXIS SETTINGS =================
+xlabel('\sigma_{amp} (MPa)')
+
+xlim([0 210])
+xticks(0:20:220)
+xtickangle(90)
+
+set(gcf, 'Position', [688 535 657 480])
+set(gca, 'FontSize', 20)
+
+legend('Location', 'northwest')
+
+box on
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');
+figureName = strrep(figureName, ' ', '_');
+
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+%% -----------Continuous: LS Amplitude Paper Figure
+% close all
+figure('Name','Continuous: LS H1 Amplitude vs Stress'); hold on; grid on
+title(sprintf('Continuous: LS H1 Amplitude - porder = %0.0f', pOrder))
+
+h = plot(SampCinterp_x, AmpH1C_LS, 'ok','MarkerSize',2,'DisplayName','H1 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (K)')
+
+xlim([0 210])
+xticks(0:30:210)
+xtickangle(90)
+
+ylim([0 0.4])
+yticks(0:0.1:0.4)
+set(gcf, 'Position', [688 535 657 480])
+set(gca, 'FontSize', 20)
+box on
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%%
+figure('Name','Continuous: LS H2 & H3 Amplitudes vs Stress'); hold on; grid on
+title(sprintf('Continuous: LS H2 and H3 Amplitudes - porder = %0.0f', pOrder))
+
+h = plot(SampCinterp_x, AmpH3C_LS*1e3, 'ob','MarkerSize',2,'DisplayName','H3 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(SampCinterp_x, AmpH2C_LS*1e3, 'or','MarkerSize',2,'DisplayName','H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(SampCinterp_x, AmpH4C_LS*1e3, 'ok','MarkerSize',2,'DisplayName','H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (mK)')
+legend
+
+xlim([0 210])
+xticks(0:30:210)
+xtickangle(90)
+
+ylim([0 4])
+yticks(0:1:4)
+set(gcf, 'Position', [688 535 657 480])
+set(gca, 'FontSize', 20)
+set(gcf,'MenuBar','figure','ToolBar','figure');
+box on
+
+%% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+%% Continuous: Least Square Amplitude Plots
+
+% --------- Prepare x-axis (stress amplitude) and theta
+theta_plot = thetaC(winCentreIdx);       % Corresponding theta
+
+% --------- Optional smoothing (for visual clarity)
+AmpH1_LS_smooth = movmean(AmpH1C_LS,5);
+AmpH2_LS_smooth = movmean(AmpH2C_LS,5);
+AmpH3_LS_smooth = movmean(AmpH3C_LS,5);
+
+% --------- Figure
+figure('Name','Continuous: LS Sliding-Window Harmonic Analysis'); 
+
+tiledlayout(3,1)
+
+% ===================== H1 =====================
+nexttile; hold on
+
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2, 'DisplayName', '\theta');
+ylabel('\theta (K)')
+
+yyaxis right
+plot(SampCinterp_x, AmpH1C_LS, '-', 'Color', [0.85 0.33 0.1], 'LineWidth', 1, 'DisplayName', 'Amp');
+plot(SampCinterp_x, AmpH1_LS_smooth, 'k', 'LineWidth', 2, 'DisplayName', 'Mean Amp');
+ylabel('Amp (K)')
+
+title(sprintf('Continuous: LS H1 Amplitude @ %d Hz', LF))
+xlabel('\sigma_{amp} (MPa)')
+grid on
+legend('Location','northwest')
+
+% ===================== H2 =====================
+nexttile; hold on
+
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2, 'DisplayName', '\theta');
+ylabel('\theta (K)')
+
+yyaxis right
+plot(SampCinterp_x, AmpH2C_LS, '-', 'Color', [0.93 0.69 0.13], 'LineWidth', 1, 'DisplayName', 'Amp');
+plot(SampCinterp_x, AmpH2_LS_smooth, 'k', 'LineWidth', 2, 'DisplayName', 'Mean Amp');
+ylabel('Amp (K)')
+% set(gca,'YScale','log')
+
+
+title(sprintf('Continuous: LS H2 Amplitude @ %d Hz', 2*LF))
+xlabel('\sigma_{amp} (MPa)')
+grid on
+legend('Location','northwest')
+
+% ===================== H3 =====================
+nexttile; hold on
+
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2, 'DisplayName', '\theta');
+ylabel('\theta (K)')
+
+yyaxis right
+plot(SampCinterp_x, AmpH3C_LS, '-', 'Color', [0 0.75 0.75], 'LineWidth', 1, 'DisplayName', 'Amp');
+plot(SampCinterp_x, AmpH3_LS_smooth, 'k', 'LineWidth', 2, 'DisplayName', 'Mean Amp');
+ylabel('Amp (K)')
+% set(gca,'YScale','log')
+
+title(sprintf('Continuous: LS H3 Amplitude @ %d Hz', 3*LF))
+xlabel('\sigma_{amp} (MPa)')
+grid on
+legend('Location','northwest')
+
+% --------- Formatting
+set(gcf, 'Position', [600 200 700 700])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+%% --------- Continuous: LS Unwrap phase
+PhaseH1_unwrap = unwrap(PhaseH1C_LS);
+PhaseH2_unwrap = unwrap(PhaseH2C_LS);
+PhaseH3_unwrap = unwrap(PhaseH3C_LS);
+
+% --------- Optional smoothing (recommended for H2, H3)
+PhaseH1_smooth = movmean(PhaseH1_unwrap,5);
+PhaseH2_smooth = movmean(PhaseH2_unwrap,5);
+PhaseH3_smooth = movmean(PhaseH3_unwrap,5);
+
+% --------- Plot
+figure('Name','LS Harmonic Phase Evolution');
+
+tiledlayout(3,1)
+
+% ===================== H1 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, PhaseH1_unwrap, '-', 'Color', [0.6 0.6 0.6], ...
+    'DisplayName','Raw Phase');
+
+plot(SampCinterp_x, PhaseH1_smooth, 'k', 'LineWidth', 2, ...
+    'DisplayName','Smoothed Phase');
+
+ylabel('\phi_{1f} (rad)')
+title(sprintf('Phase Evolution H1 @ %d Hz', LF))
+grid on
+legend('Location','best')
+
+% ===================== H2 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, PhaseH2_unwrap, '-', 'Color', [0.6 0.6 0.6], ...
+    'DisplayName','Raw Phase');
+
+plot(SampCinterp_x, PhaseH2_smooth, 'k', 'LineWidth', 2, ...
+    'DisplayName','Smoothed Phase');
+
+ylabel('\phi_{2f} (rad)')
+title(sprintf('Phase Evolution H2 @ %d Hz', 2*LF))
+grid on
+legend('Location','best')
+
+% ===================== H3 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, PhaseH3_unwrap, '-', 'Color', [0.6 0.6 0.6], ...
+    'DisplayName','Raw Phase');
+
+plot(SampCinterp_x, PhaseH3_smooth, 'k', 'LineWidth', 2, ...
+    'DisplayName','Smoothed Phase');
+
+ylabel('\phi_{3f} (rad)')
+xlabel('\sigma_{amp} (MPa)')
+title(sprintf('Phase Evolution H3 @ %d Hz', 3*LF))
+grid on
+legend('Location','best')
+
+% --------- Formatting
+set(gcf, 'Position', [700 200 650 700])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+%% Continuous: Frequency Adaptive Least Square Method
+
+tref_signal = (0:N_thetaC-1) / SF;
+tref_signal = tref_signal(:);
+
+applyHANN = hann(SFnewTSA);
+applyHANN = applyHANN(:);
+
+fSearch = linspace(LF-BW, LF+BW, 15);   % frequency search grid
+
+for k = 1:nWinThetaC
+
+    end_idx = k + SFnewTSA - 1;
+
+    if end_idx > N_thetaC
+        break;
+    end
+
+    kIndices = (k:end_idx)';
+
+    segmentC = detrend(thetaC(kIndices), pOrder);
+    segmentC = segmentC(:);
+
+    t_seg = tref_signal(kIndices);
+
+    bestErr = inf;
+
+    % --------- Frequency search
+    for ftest = fSearch
+
+        A = [ ...
+            cos(2*pi*ftest*t_seg),   sin(2*pi*ftest*t_seg), ...
+            cos(2*pi*2*ftest*t_seg),sin(2*pi*2*ftest*t_seg), ...
+            cos(2*pi*3*ftest*t_seg),sin(2*pi*3*ftest*t_seg) ...
+            ];
+
+        % Weighted LS (efficient form)
+        Aw = A .* applyHANN;
+        yw = segmentC .* applyHANN;
+
+        coeff = Aw \ yw;
+
+        residual = norm(yw - Aw*coeff);
+
+        if residual < bestErr
+            bestErr = residual;
+            bestCoeff = coeff;
+            bestFreqC(k) = ftest;
+        end
+    end
+
+    % --------- Extract coefficients
+    a1 = bestCoeff(1); b1 = bestCoeff(2);
+    a2 = bestCoeff(3); b2 = bestCoeff(4);
+    a3 = bestCoeff(5); b3 = bestCoeff(6);
+
+    % --------- Amplitudes
+    AmpH1C_LSFA(k) = sqrt(a1^2 + b1^2); % FA = Frequency Addaptive
+    AmpH2C_LSFA(k) = sqrt(a2^2 + b2^2);
+    AmpH3C_LSFA(k) = sqrt(a3^2 + b3^2);
+
+    % --------- Phases
+    PhaseH1C_LSFA(k) = atan2(b1, a1);
+    PhaseH2C_LSFA(k) = atan2(b2, a2);
+    PhaseH3C_LSFA(k) = atan2(b3, a3);
+
+end
+
+winCentreIdx = (1:nWinThetaC) + floor(SFnewTSA/2);
+
+%% ---Continuous: Frequency-Adaptive Least Square Method Peak Tracking Only ---
+% ------------- Best Frequency Track
+
+bestFreq_H1C = bestFreqC;        % 1f
+bestFreq_H2C = 2 * bestFreqC;    % 2f
+bestFreq_H3C = 3 * bestFreqC;    % 3f
+figure('Name','Adaptive Frequency vs Stress Amplitude');
+
+tiledlayout(3,1)
+
+% ===================== H1 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, bestFreq_H1C, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','b', 'MarkerEdgeColor','b', ...
+    'DisplayName','Raw');
+
+plot(SampCinterp_x, movmean(bestFreq_H1C,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+title(sprintf('H1 Frequency Evolution (~%d Hz)', LF))
+grid on
+legend('Location','best')
+
+% ===================== H2 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, bestFreq_H2C, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','r', 'MarkerEdgeColor','r', ...
+    'DisplayName','Raw');
+
+plot(SampCinterp_x, movmean(bestFreq_H2C,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+title(sprintf('H2 Frequency Evolution (~%d Hz)', 2*LF))
+grid on
+legend('Location','best')
+
+% ===================== H3 =====================
+nexttile; hold on
+
+plot(SampCinterp_x, bestFreq_H3C, 'o', ...
+    'MarkerSize',4, 'MarkerFaceColor','g', 'MarkerEdgeColor','g', ...
+    'DisplayName','Raw');
+
+plot(SampCinterp_x, movmean(bestFreq_H3C,5), 'k', 'LineWidth',2, ...
+    'DisplayName','Smoothed');
+
+ylabel('Frequency (Hz)')
+xlabel('\sigma_{amp} (MPa)')
+title(sprintf('H3 Frequency Evolution (~%d Hz)', 3*LF))
+grid on
+legend('Location','best')
+
+% --------- Formatting
+set(gcf, 'Position', [650 200 650 700])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%% Continuous: Amplitude Plots of Frequency-Adaptive LS
+
+theta_plot = thetaC(winCentreIdx);
+
+figure('Name','Continuous: Adaptive LS Harmonics (Amplitude)');
+tiledlayout(3,1)
+
+% ---------- H1
+nexttile; hold on
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2)
+ylabel('\theta (K)')
+
+yyaxis right
+plot(SampCinterp_x, AmpH1C_LSFA, 'r')
+plot(SampCinterp_x, movmean(AmpH1C_LSFA,5),'k','LineWidth',2)
+ylabel('Amp (K)')
+% title(sprintf('H1 @ ~%.2f Hz', LF))
+title(sprintf('Continuous: LS Max Amp %.f\\pm%.1f Hz', LF, BW));
+grid on
+
+% ---------- H2
+nexttile; hold on
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2)
+
+yyaxis right
+plot(SampCinterp_x, AmpH2C_LSFA, 'r')
+plot(SampCinterp_x, movmean(AmpH2C_LSFA,5),'k','LineWidth',2)
+% set(gca,'YScale','log')
+% title(sprintf('H2 @ ~%.2f Hz', 2*LF))
+title(sprintf('Continuous: LS Max Amp %.f\\pm%.1f Hz', LF*2, BW));
+grid on
+
+% ---------- H3
+nexttile; hold on
+yyaxis left
+plot(SampCinterp_x, theta_plot, 'b', 'LineWidth', 2)
+
+yyaxis right
+plot(SampCinterp_x, AmpH3C_LSFA, 'r')
+plot(SampCinterp_x, movmean(AmpH3C_LSFA,5),'k','LineWidth',2)
+% set(gca,'YScale','log')
+% title(sprintf('H3 @ ~%.2f Hz', 3*LF))
+title(sprintf('Continuous: LS Max Amp %.f\\pm%.1f Hz', LF*3, BW));
+xlabel('\sigma_{amp} (MPa)')
+grid on
+
+set(gcf,'Position',[600 200 700 800])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+%% ------------------- Continuous: Phase Plot Frequency-Adaptive LS
+
+figure('Name','Adaptive LS Harmonics (Phase)');
+tiledlayout(3,1)
+
+nexttile
+plot(SampCinterp_x, PhaseH1C_LSFA,'LineWidth',1.5)
+title('Phase H1')
+ylabel('\phi (rad)')
+grid on
+
+nexttile
+plot(SampCinterp_x, PhaseH2C_LSFA,'LineWidth',1.5)
+title('Phase H2')
+ylabel('\phi (rad)')
+grid on
+
+nexttile
+plot(SampCinterp_x, PhaseH3C_LSFA,'LineWidth',1.5)
+title('Phase H3')
+ylabel('\phi (rad)')
+xlabel('\sigma_{amp} (MPa)')
+grid on
+
+set(gcf,'Position',[700 200 600 800])
+set(findall(gcf,'-property','FontSize'),'FontSize',16)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+
+
+%% Continuous: Leaset Square Method as per paper Krapez yr. 2000.
+% --------- Preallocate
+T0_LS = zeros(nWinThetaC,1);
+dT_LS = zeros(nWinThetaC,1);
+
+AmpH1_LS_K = zeros(nWinThetaC,1); % K for Krapez
+AmpH2_LS_K = zeros(nWinThetaC,1);
+AmpH3_LS_K = zeros(nWinThetaC,1);
+
+PhaseH1_LS_K = zeros(nWinThetaC,1);
+PhaseH2_LS_K = zeros(nWinThetaC,1);
+PhaseH3_LS_K = zeros(nWinThetaC,1);
+
+% --------- Loop
+for k = 1:nWinThetaC
+
+    end_idx = k + SFnewTSA - 1;
+    if end_idx > N_thetaC
+        break;
+    end
+
+    kIndices = (k:end_idx)';
+    % t_seg = detrend(tThetaC(kIndices),6);
+    t_seg = tThetaC(kIndices);
+    segmentC = thetaC(kIndices);
+
+    % --------- Angular frequency
+    omega = 2*pi*LF;
+
+    % --------- Design matrix (paper-consistent model)
+    A = [ ...
+        ones(size(t_seg)), ...                     % T0
+        LF * t_seg, ...                           % ΔT f t
+        sin(omega*t_seg), cos(omega*t_seg), ...   % 1f
+        sin(2*omega*t_seg), cos(2*omega*t_seg), ... % 2f
+        sin(3*omega*t_seg), cos(3*omega*t_seg) ...  % 3f
+        ];
+
+    % --------- Least squares solution
+    coeff = A \ segmentC;
+
+    % --------- Extract coefficients
+    T0_LS(k) = coeff(1);
+    dT_LS(k) = coeff(2);
+
+    a1 = coeff(3); b1 = coeff(4);
+    a2 = coeff(5); b2 = coeff(6);
+    a3 = coeff(7); b3 = coeff(8);
+
+    % --------- Convert to amplitude & phase
+    AmpH1_LS_K(k) = sqrt(a1^2 + b1^2);
+    AmpH2_LS_K(k) = sqrt(a2^2 + b2^2);
+    AmpH3_LS_K(k) = sqrt(a3^2 + b3^2);
+
+    PhaseH1_LS_K(k) = atan2(b1, a1);
+    PhaseH2_LS_K(k) = atan2(b2, a2);
+    PhaseH3_LS_K(k) = atan2(b3, a3);
+
+end
+
+% --------- Window centre alignment
+winCentreIdx = (1:nWinThetaC) + floor(SFnewTSA/2);
+
+
+% ###################################################
+% ---------- Plots
+
+% ------ H1
+figure('Name','Harmonic Amplitudes (Paper Model)'); hold on
+
+plot(SampCinterp_x, AmpH1_LS_K, 'b', 'DisplayName','H1');
+
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (K)')
+title('Harmonic Amplitudes vs Stress (LS - Paper Model)')
+grid on
+
+set(gcf, 'Position', [688 535 657 400])
+set(gca, 'FontSize', 20)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+% ---------- H2 and H3
+figure('Name','Harmonic Amplitudes (Paper Model)'); hold on
+plot(SampCinterp_x, AmpH2_LS_K, 'r', 'DisplayName','H2');
+plot(SampCinterp_x, AmpH3_LS_K, 'g', 'DisplayName','H3');
+
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (K)')
+title('Harmonic Amplitudes vs Stress (LS - Paper Model)')
+legend('Location','best')
+grid on
+
+set(gcf, 'Position', [688 535 657 400])
+set(gca, 'FontSize', 20)
+
+% ---------------- Save 
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
 
 %% ############ Segment: Stress mplitude for each segment   ################
+% @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+%(((((((((((((((((((((((((((((((((((((()))))))))))))))))))))))))))))))))))))
 
 ForceAmpSegs = nan(maxN, N_segF);   % amplitude vs time inside segment
 SampSegs = nan(maxN, N_segF);   % stress amplitude vs time
@@ -3490,25 +5082,25 @@ for s = 1:N_segF
     end
 
     % -------- Peak Detection --------
-    [Fhighs, locs_Fhighs] = findpeaks(Fseg, ...
+    [Fpk, locs_Fhighs] = findpeaks(Fseg, ...
         'MinPeakProminence', minProminence);
 
     [Flows_raw, locs_Flows] = findpeaks(-Fseg, ...
         'MinPeakProminence', minProminence);
-    Flows = -Flows_raw;
+    Ftr = -Flows_raw;
 
     % Manual boundary checks (safer form)
     if Fseg(1) > Fseg(min(2,end))
-        Fhighs = [Fseg(1); Fhighs];
+        Fpk = [Fseg(1); Fpk];
         locs_Fhighs = [1; locs_Fhighs];
     end
 
     if Fseg(end) > Fseg(max(end-1,1))
-        Fhighs = [Fhighs; Fseg(end)];
+        Fpk = [Fpk; Fseg(end)];
         locs_Fhighs = [locs_Fhighs; numel(Fseg)];
     end
 
-    if numel(Fhighs) < 2 || numel(Flows) < 2
+    if numel(Fpk) < 2 || numel(Ftr) < 2
         continue
     end
 
@@ -3517,8 +5109,8 @@ for s = 1:N_segF
 
     % -------- Robust Linear Fit (Envelope Drift Removal) --------
 
-    bH = robustfit(time_Fhighs, Fhighs);
-    bL = robustfit(time_Flows,  Flows);
+    bH = robustfit(time_Fhighs, Fpk);
+    bL = robustfit(time_Flows,  Ftr);
 
     aH = bH(1);  mH = bH(2);
     aL = bL(1);  mL = bL(2);
@@ -3533,16 +5125,16 @@ for s = 1:N_segF
     Fhigh_pred = aH + mH*time_Fhighs;
     Flow_pred  = aL + mL*time_Flows;
 
-    SS_res_H = sum((Fhighs - Fhigh_pred).^2);
-    SS_tot_H = sum((Fhighs - mean(Fhighs)).^2);
+    SS_res_H = sum((Fpk - Fhigh_pred).^2);
+    SS_tot_H = sum((Fpk - mean(Fpk)).^2);
     R2_H = 1 - SS_res_H/SS_tot_H;
 
-    SS_res_L = sum((Flows - Flow_pred).^2);
-    SS_tot_L = sum((Flows - mean(Flows)).^2);
+    SS_res_L = sum((Ftr - Flow_pred).^2);
+    SS_tot_L = sum((Ftr - mean(Ftr)).^2);
     R2_L = 1 - SS_res_L/SS_tot_L;
 
-    RMSE_H = sqrt(mean((Fhighs - Fhigh_pred).^2));
-    RMSE_L = sqrt(mean((Flows  - Flow_pred).^2));
+    RMSE_H = sqrt(mean((Fpk - Fhigh_pred).^2));
+    RMSE_L = sqrt(mean((Ftr  - Flow_pred).^2));
 
     fprintf('Segment %d\n', s);
     fprintf('RMSE Highs: %.2f N | R^2: %.4f\n', RMSE_H, R2_H);
@@ -3563,7 +5155,8 @@ SampSegsMeans = mean(SampSegs,1,'omitnan');
 SampSegsMeans = SampSegsMeans(:);
 
 
-figure; hold on;
+figure('Name','Segments: Stress Amplitude per Segment')
+hold on;
 
 for s = 1:N_segF
 
@@ -3591,7 +5184,7 @@ end
 
 xlabel('Time (s)');
 ylabel('\sigma_a (MPa)');
-title('Stress Amplitude per Segment');
+title(sprintf('Segments: Stress Amplitude and Ratio per Segment - %s', test_details));
 grid on;
 
 % --- Save figure ---
@@ -3649,11 +5242,11 @@ xlabel('Frequency (Hz)')
 xticks (0:LF:round(SF_F)/2)
 ylabel('Amplitude (N)')
 
-title('Segments: Force Single-Sided Amplitude Spectrum per Segment (DC Removed)', test_details);
+title(sprintf('Segments: Force Single-Sided Amplitude Spectrum per Segment (DC Removed) - %s', test_details));
 legend(legTxt, 'Location','best');
 grid on;
 
-% --- Save figure ---
+% % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
 figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
@@ -3674,7 +5267,7 @@ xlabel('Frequency (Hz)')
 xticks (0:LF:round(SF_F)/2)
 ylabel('Log Amplitude (N)')
 
-title('Segments: Force Single-Sided Amplitude Spectrum per Segment (DC Removed)', test_details);
+title(sprintf('Segments: Force Single-Sided Amplitude Spectrum per Segment (DC Removed) %s', test_details));
 legend(legTxt, 'Location','best');
 grid on;
 
@@ -3690,10 +5283,10 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 d1Segs = nan(maxNthetaSeg, N_segTheta);
 
 % Ensure window length is odd for centred differentiation
-SFnewDissipation = round(windowDissipation * SF, 9);
-if mod(SFnewDissipation,2) == 0
-    SFnewDissipation = SFnewDissipation + 1; % Ensure odd number for convolution
-end
+% SFnewDissipation = round(windowDissipation * SF, 9);
+% if mod(SFnewDissipation,2) == 0
+%     SFnewDissipation = SFnewDissipation + 1; % Ensure odd number for convolution
+% end
 
 kd = (SFnewDissipation - 1)/2;
 
@@ -3745,21 +5338,23 @@ d1SegsMeans = d1SegsMeans(:);
 
 D1Segs = d1Segs / LF;
 D1SegsMeans = d1SegsMeans / LF;
+
 %%
 % -------------------------------
 % Plot 1: d1SegsMeans vs SampSegsMeans
 % -------------------------------
 figure('Name','d1SegsMeans vs SampSegsMeans')
+title('Segments: mean d1 vs mean Stress Amplitude ', test_details);
 plot(SampSegsMeans, d1SegsMeans, 'b-o','MarkerSize',6)
 grid on
 xlabel('\sigma_{amp} (MPa)')
 ylabel('d1 (kW/m^3)')
-title('Segments'' mean: d1 vs \sigma_{amp}')
+
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+% figTitle = get(get(gca, 'Title'), 'String');
+% figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+% figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+% saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 % -------------------------------
 % Plot 2: D1SegsMeans vs SampSegsMeans
@@ -3768,8 +5363,9 @@ figure('Name','D1SegsMeans vs SampSegsMeans')
 plot(SampSegsMeans, D1SegsMeans, 'b-o','MarkerSize',6)
 grid on
 xlabel('\sigma_{amp} (MPa)')
-ylabel('D1 (kJ/m³/cycle)')
-title('Segments'' mean: D1 vs \sigma_{amp}')
+ylabel('D1 (kJ·m^{-3}/cycle)')
+title(sprintf('Segments: mean D1 vs mean Stress Amplitude - %s',test_details));
+
 % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
 figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
@@ -3777,7 +5373,9 @@ figureName = strrep(figureName, ' ', '_');           % replace spaces with under
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 SampInterpSegs_d1 = nan(maxNthetaSeg, N_segTheta);
-figure; hold on;
+
+figure('Name','Segments: D1 vs Stress Amplitude')
+hold on;
 
 for s = 1:N_segTheta
 
@@ -3806,7 +5404,7 @@ end
 
 xlabel('\sigma_{amp} (MPa)');
 ylabel('D1 (kJ/m^3/cycle)');
-title('Segments: D1 vs Stress Amplitude');
+title(sprintf('Segments: D1 vs Stress Amplitude (%.0f s window) %s',windowDissipation, test_details));
 grid on;
 
 SampInterpSegsVector_d1 = SampInterpSegs_d1(~isnan(SampInterpSegs_d1));
@@ -3872,10 +5470,10 @@ legend(legTxt, 'Location','best');
 grid on;
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
-saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+% figTitle = get(get(gca, 'Title'), 'String');
+% figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+% figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+% saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 % --------------------- Y-axis: Log scale
 figure('Name','Segment: Theta SF Analysis (log scale)'); hold on; grid on;
@@ -3892,7 +5490,7 @@ xlabel('Frequency (Hz)')
 xticks (0:LF:round(SF)/2)
 ylabel('Log Amplitude (K)')
 
-title('Segments: Theta Single-Sided Amplitude Spectrum per Segment (DC Removed)', test_details);
+title(sprintf('Segments: Theta Single-Sided Amplitude Spectrum per Segment (DC Removed) %s', test_details));
 legend(legTxt, 'Location','best');
 grid on;
 
@@ -3904,14 +5502,11 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 %% Segment: SHTSA of Theta per Segment (FFT method)
 
-FL2 = 2*LF;                % 2nd harmonic [Hz]
-FL3 = 3*LF;                % 3rd harmonic [Hz]
-
 % Aliasing check
-if FL3 > SF/2
+if LF3 > SF/2
     warning(['\n################################\n' ...
         'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
-        '################################'], FL3, SF/2);
+        '################################'], LF3, SF/2);
 end
 
 [H1Segs, H2Segs, H3Segs, H1maxSegs, H2maxSegs, H3maxSegs] = deal(nan(maxNthetaSeg,N_segTheta));
@@ -3947,23 +5542,23 @@ for s = 1:N_segTheta
     for k = 1:nWinSeg
 
         end_idx = k+SFnewTSA-1;
-        segment = detrend(theta_s(k : end_idx), 6);
+        segmentC = detrend(theta_s(k : end_idx), 6);
         % segment = detrend(theta(k : end_idx), 1);
-        % segment = theta_C(k : end_idx);
+        % segment = thetaC(k : end_idx);
 
-        beta = abs(fft(segment)) * (2/SFnewTSA);
+        beta = abs(fft(segmentC)) * (2/SFnewTSA);
         idx1 = find(f >= (LF-BW) & f <= (LF+BW));
         [maxAmpH1seg(k), j1] = max(beta(idx1)); maxFreqH1seg(k) = f(idx1(j1));
         [~, i1] = min(abs(f - LF)); ampAtH1seg(k) = beta(i1);
 
-        idx2 = find(f >= (FL2-BW) & f <= (FL2+BW));
+        idx2 = find(f >= (LF2-BW) & f <= (LF2+BW));
         [maxAmpH2seg(k), j2] = max(beta(idx2)); maxFreqH2seg(k) = f(idx2(j2));
-        [~, i2] = min(abs(f - FL2)); ampAtH2seg(k) = beta(i2);
+        [~, i2] = min(abs(f - LF2)); ampAtH2seg(k) = beta(i2);
 
-        if FL3<SF/2
-            idx3 = find(f >= (FL3-BW) & f <= (FL3+BW));
+        if LF3<SF/2
+            idx3 = find(f >= (LF3-BW) & f <= (LF3+BW));
             [maxAmpH3seg(k), j3] = max(beta(idx3)); maxFreqH3seg(k) = f(idx3(j3));
-            [~, i3] = min(abs(f - FL3)); ampAtH3seg(k) = beta(i3);
+            [~, i3] = min(abs(f - LF3)); ampAtH3seg(k) = beta(i3);
         end
 
     end
@@ -4005,7 +5600,7 @@ end
 
 %% --- Segment's Harmonic MEANs vs MEAN stress amplitude 
 nn = 3;
-if FL3>SF/2
+if LF3>SF/2
     nn = 2;
 end
 % -- Segment Harmonic Amplitudes vs Stress amplitude
@@ -4030,7 +5625,7 @@ subplot(nn,2,3);
 plot(SampSegsMeans, H2SegsMeans, 'g-o', 'LineWidth', 2, markersize=5);
 hold on;
 ylabel('Amp (K)');
-title(sprintf('Amp @ %.f Hz', FL2)); grid on;
+title(sprintf('Amp @ %.f Hz', LF2)); grid on;
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp', 'Location', 'best');
 
@@ -4038,16 +5633,16 @@ subplot(nn,2,4);
 plot(SampSegsMeans, H2maxSegsMeans, 'm-o', 'LineWidth', 2, markersize=5);
 ylabel('Amp (K)');
 hold on;
-title(sprintf('Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
+title(sprintf('Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp', 'Location', 'best');
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,2,5);
     plot(SampSegsMeans, H3SegsMeans, 'r-o', 'LineWidth', 2, markersize=5);
     hold on;
     ylabel('Amp (K)');
-    title(sprintf('Amp @ %.f Hz', FL3)); grid on;
+    title(sprintf('Amp @ %.f Hz', LF3)); grid on;
     xlabel('\sigma_{amp} (MPa)');
     legend('Amp', 'Location', 'best');
 
@@ -4055,17 +5650,21 @@ if FL3<SF/2
     plot(SampSegsMeans, H3maxSegsMeans, 'c-o', 'LineWidth', 2, markersize=5);
     hold on;
     ylabel('Amp (K)');
-    title(sprintf('Max Amp %.f\\pm%. 1f Hz', FL3, BW)); grid on;
+    title(sprintf('Max Amp %.f\\pm%. 1f Hz', LF3, BW)); grid on;
     xlabel('\sigma_{amp} (MPa)');
     legend('Amp', 'Location', 'best');
 end
 
-sgtitle(sprintf('Segment''s Mean Harmonic Amps. vs. Mean Stress Amp. \n %s', test_details));
+sg = sgtitle(sprintf('Segment: Mean Harmonic Amps. vs. Mean Stress Amp. \n%s', test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 %% --- Segment wise Harmonic Amplitudes vs stress amplitude 
@@ -4073,7 +5672,7 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 figure('Name','Harmonics vs Stress Amplitude (All Segments)');
 
 nn = 3;
-if FL3 > SF/2
+if LF3 > SF/2
     nn = 2;
 end
 
@@ -4134,42 +5733,47 @@ for s = 1:N_segTheta
     subplot(nn,2,3); hold on;
     plot(Samp_interp, H2_s, 'g-');
     xlabel('\sigma_{amp} (MPa)'); ylabel('Amp (K)');
-    title(sprintf('Amp @ %.f Hz', FL2)); grid on;
+    title(sprintf('Amp @ %.f Hz', LF2)); grid on;
 
     subplot(nn,2,4); hold on;
     plot(Samp_interp, H2max_s, 'm-');
     xlabel('\sigma_{amp} (MPa)'); ylabel('Amp (K)');
-    title(sprintf('Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
+    title(sprintf('Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
 
-    if FL3 < SF/2
+    if LF3 < SF/2
         subplot(nn,2,5); hold on;
         plot(Samp_interp, H3_s, 'r-');
         xlabel('\sigma_{amp} (MPa)'); ylabel('Amp (K)');
-        title(sprintf('Amp @ %.f Hz', FL3)); grid on;
+        title(sprintf('Amp @ %.f Hz', LF3)); grid on;
 
         subplot(nn,2,6); hold on;
         plot(Samp_interp, H3max_s, 'c-');
         xlabel('\sigma_{amp} (MPa)'); ylabel('Amp (K)');
-        title(sprintf('Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
+        title(sprintf('Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
     end
 
 end
 
 % sgtitle('Sliding-Window Harmonic Amplitudes vs Stress Amplitude');
-sgtitle(sprintf('Segment: %.1fs Sliding-Window - Hamonic Amps. vs Stress Amp.\n %s', windowTSA,test_details));
+sg = sgtitle(sprintf('Segment: %.1fs Sliding-Window - Harmonic Amps. vs Stress Amp.\n%s', windowTSA, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 %% Saving Variables
+% Lahore = Karachi;
 % ***************************************************
 % ***************************************************
 % ***************************************************
 % ***************************************************
-if windowDissipation ~= 3 || BW ~= 1
+if windowDissipation ~= 5 || BW ~= 1
     error('Window size is not 3 seconds or Bandwidth is not 1.');
 end
 
@@ -4185,14 +5789,14 @@ ampAtH2 = ampAtH2(loading_window);
 maxAmpH2 = maxAmpH2(loading_window);
 
 % List of variables to save
-saveVars = {'LF','SF','Force_idxS','Force_idxE','temp_idxS','temp_idxE',...
+saveVars = {'LF','SF','Force_idxS','Force_idxE','temp_idxS','temp_idxE','Ti_idxS','Ti_idxE','BeforeLoad_IdxEnd',...
     'SampInterp','theta', 'd1','D1', 'ampAtH1', 'maxAmpH1','ampAtH2','ampAtH2mean','maxAmpH2',... %'d1_SelfHeating', 'D1_SelfHeating',
-    'SampC','theta_C', 'd1C','D1C', 'ampAtH1C', 'maxAmpH1C','ampAtH2C','ampAtH2Cmean', 'maxAmpH2C',...
+    'SampC','thetaC', 'd1C','D1C', 'ampAtH1C', 'maxAmpH1C','ampAtH2C','ampAtH2Cmean', 'maxAmpH2C',...
     'SampInterpSegsVector_d1','thetaSegsVector','d1_Segs_Vector','D1SegsVector','H1SegsVector','H2SegsVector',... % From segment wise analysis
     'SampSegsMeans', 'd1SegsMeans','D1SegsMeans', 'H1SegsMeans', 'H2SegsMeans'};
 
 % Add H3 variables only when needed
-if FL3 < SF/2
+if LF3 < SF/2
     ampAtH3 = ampAtH3(loading_window);
     maxAmpH3 = maxAmpH3(loading_window);
 
@@ -4205,7 +5809,7 @@ end
 safeTestName = strrep(test_details, '-', '_');
 safeTestName = regexprep(safeTestName, '[^a-zA-Z0-9_]', '_');
 
-matFileName = fullfile(folderPath, ['SH_d1_' safeTestName '.mat']);
+matFileName = fullfile(folderPath, ['SH_d1_' num2str(windowTSA) 's_' safeTestName '.mat']);
 
 SegEndLocs = struct();
 
@@ -4224,7 +5828,27 @@ end
 
 save(matFileName, '-struct', 'SegEndLocs');
 
+%%
+saveFolder = 'C:\Users\mo170\OneDrive - The University of Waikato\PhD\My Paper\Figures\Combined Results';
 
+TestData.TestName     = test_details;
+TestData.SampCinterp  = SampCinterp;
+TestData.MeanThetaC5s = meanThetaC(:,2);
+TestData.thetaC       = thetaC;
+TestData.D1C5s = D1Cxx(:,2);
+
+TestData.SampCHarmonic = SampCinterp_x;
+TestData.H1C5s = AmpH1C_LS;
+TestData.H2C5s = AmpH2C_LS;
+TestData.H3C5s = AmpH3C_LS;
+
+save(fullfile(saveFolder,[test_details,'.mat']), 'TestData');
+
+%%
+Fs = 44100;
+t = 0:1/Fs:0.3;
+y = sin(2*pi*1000*t);
+sound(y, Fs)
 %% Check: Is it BL test or not
 % Check if folder path contains 'BL'
 if ~contains(folderPath, 'BL')
@@ -4238,84 +5862,90 @@ end
 % ################################################
 
 % Ensure column vectors
-F_Sync = F_Sync(:);
-thetaSync = thetaSync(:);
+% F_fatigue = F_fatigue(:);
+% 
+% % --- Find peaks ---
+% [Fpk, Fpk_loc] = findpeaks(F_fatigue,'MinPeakProminence',minProminence);
+% 
+% % --- Detect block transitions using peak jumps ---
+% diffPk = diff(Fpk);
+% 
+% jumpThresh = 100 * mean((diffPk));
+% idx_jump = find(diffPk > jumpThresh);
+% 
+% idx_jump = [idx_jump([true; diff(idx_jump) > 20])];
+% 
+% % --- Segment boundaries (in peak index space) ---
+% segPeakStartIdx = [1; idx_jump + 10 + 1];
+% segPeakEndIdx = [idx_jump - 10; numel(Fpk)];
+% 
+% N_segments = numel(segPeakStartIdx);
+% 
+% segment_starts = zeros(N_segments,1);
+% segment_ends = zeros(N_segments,1);
+% 
+% for s = 1:N_segments
+% 
+%     % Segment start
+%     if s == 1
+%         segment_starts(s) = 1;                 % first segment starts at beginning
+%     else
+%         segment_starts(s) = Fpk_loc(segPeakStartIdx(s));% + 1;
+%     end
+% 
+%     % Segment end = last peak before jump
+%     segment_ends(s) = Fpk_loc(segPeakEndIdx(s));
+% 
+% end
+% 
+% % ==============================================================
+% maxN = max(segment_ends - segment_starts +1);
+% 
+% ForceBL = nan(maxN, N_segments);
+% thetaBL = nan(maxN, N_segments);
+% t_BL = nan(maxN, N_segments);
+% 
+% Force_BL_X = [];
+% theta_BL_X = [];
+% t_BL_X = [];
+% 
+% for s = 1:N_segments
+%     idx = segment_starts(s) : segment_ends(s);
+%     N_Rows = length(idx);
+% 
+%     ForceBL(1:N_Rows,s) = F_fatigue(idx);
+%     thetaBL(1:N_Rows,s) = theta(idx);
+%     t_BL(1:N_Rows,s) = tTheta(idx);
+% 
+%     Force_BL_X = [Force_BL_X; F_fatigue(idx)];
+%     theta_BL_X = [theta_BL_X; theta(idx)];
+% end
+% 
+% % ==============================================================
+% % NEW TIME VECTOR STARTING AT 0
+% 
+% dt = mode(diff(tTheta));
+% t_X = (0:dt:(length(theta_BL_X)-1)*dt).'; % both Force_BL_X and theta_BL_X have same length
 
 
-% --- Find peaks ---
-[Fpk, Fpk_loc] = findpeaks(F_Sync,'MinPeakProminence',minProminence);
+Force_BL_X = ForceC;
+tF_X = tFC;
+theta_BL_X = thetaC;
+tTheta_X = tThetaC;
 
-% --- Detect block transitions using peak jumps ---
-diffPk = diff(Fpk);
-
-jumpThresh = 100 * mean((diffPk));
-idx_jump = find(diffPk > jumpThresh);
-
-idx_jump = [idx_jump([true; diff(idx_jump) > 20])];
-
-% --- Segment boundaries (in peak index space) ---
-segPeakStartIdx = [1; idx_jump + 10 + 1];
-segPeakEndIdx = [idx_jump - 10; numel(Fpk)];
-
-N_segments = numel(segPeakStartIdx);
-
-segment_starts = zeros(N_segments,1);
-segment_ends = zeros(N_segments,1);
-
-for s = 1:N_segments
-
-    % Segment start
-    if s == 1
-        segment_starts(s) = 1;                 % first segment starts at beginning
-    else
-        segment_starts(s) = Fpk_loc(segPeakStartIdx(s));% + 1;
-    end
-
-    % Segment end = last peak before jump
-    segment_ends(s) = Fpk_loc(segPeakEndIdx(s));
-
-end
-
-% ==============================================================
-maxN = max(segment_ends - segment_starts +1);
-
-ForceBL = nan(maxN, N_segments);
-thetaBL = nan(maxN, N_segments);
-t_BL = nan(maxN, N_segments);
-
-Force_BL_X = [];
-theta_BL_X = [];
-t_BL_X = [];
-
-for s = 1:N_segments
-    idx = segment_starts(s) : segment_ends(s);
-    N_Rows = length(idx);
-
-    ForceBL(1:N_Rows,s) = F_Sync(idx);
-    thetaBL(1:N_Rows,s) = thetaSync(idx);
-    t_BL(1:N_Rows,s) = t_sync(idx);
-
-    Force_BL_X = [Force_BL_X; F_Sync(idx)];
-    theta_BL_X = [theta_BL_X; thetaSync(idx)];
-end
-
-% ==============================================================
-% NEW TIME VECTOR STARTING AT 0
-
-dt = mode(diff(t_sync));
-t_X = (0:dt:(length(theta_BL_X)-1)*dt).'; % both Force_BL_X and theta_BL_X have same length
+thetaBL = thetaSegs;
 
 
 % ============================= PLOT
 figure('Name','BL Segment Assembly')
-plot(t_X, Force_BL_X, 'k')
+plot(tF_X, Force_BL_X, 'k')
 ylabel('Force (N)')
 hold on
 yyaxis right
-plot(t_X, theta_BL_X, 'r')
+plot(tTheta_X, theta_BL_X, 'r')
 ylabel('\theta (K)')
 xlabel('Time (s)')
-title('BL Segments: Force and \theta')
+title(sprintf('BL Segments: Force and theta - %s', test_details))
 legend ('F continuous','\theta continuous', 'location','northwest')
 grid on
 
@@ -4326,6 +5956,14 @@ figureName = strrep(figureName, ' ', '_');           % replace spaces with under
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 %% Block Loading: Stress Amplitude calculation
+nRows = size(ForceSegs,1);
+
+% triming the edgest of the force blocks to eliminate the transitional periods
+startIdx = floor(0.05*nRows) + 1;
+endIdx   = ceil(0.95*nRows);
+
+ForceBL = ForceSegs(startIdx:endIdx,:);
+
 N_segments = size(ForceBL,2);
 ForceAmpBL = nan(N_segments,1);
 
@@ -4366,42 +6004,44 @@ SampBL = ForceAmpBL./ xarea / 1e6; % unit: MPa
 
 %% Block Loading: Mechanical dissipation calculation d1
 
-d1BL = nan(maxN,N_segments);
+THS_BL = nan(maxN,N_segments); % THS = Total Heat Source
 
 for s = 1:N_segments
 
-    thetaBL_s = thetaBL(~isnan(thetaBL(:,s)),s);
+    % thetaBL_s = thetaBL(~isnan(thetaBL(:,s)),s);
+    thetaBL_s = thetaSegs(~isnan(thetaSegs(:,s)),s);
     movmean_thetaBL_s = movmean(thetaBL_s, SFnewDissipation, 'endpoints','fill');
-    tBL_s = t_BL(~isnan(t_BL(:,s)), s);
+    % tThetaSegs = tThetaSegs
+    tBL_s = tThetaSegs(~isnan(tThetaSegs(:,s)), s);
     tBL_s = tBL_s - tBL_s(1);
 
-    d1BL_s = nan(size(thetaBL_s));
+    THS_BL_s = nan(size(thetaBL_s));
     kd = (SFnewDissipation-1)/2;
 
     for k = (SFnewDissipation):length(thetaBL_s)-(SFnewDissipation-1)
-        d1BL_s(k) = rho * C * (((movmean_thetaBL_s(k+kd) - movmean_thetaBL_s(k-kd)) / (tBL_s(k+kd) - tBL_s(k-kd))) + movmean_thetaBL_s(k)/tau);
+        THS_BL_s(k) = rho * C * (((movmean_thetaBL_s(k+kd) - movmean_thetaBL_s(k-kd)) / (tBL_s(k+kd) - tBL_s(k-kd))) + movmean_thetaBL_s(k)/tau);
     end
 
-    d1BL_s = d1BL_s/1000; % Converting units into kilo
+    THS_BL_s = THS_BL_s/1000; % Converting units into kilo
 
-    d1BL(1:length(d1BL_s),s) = d1BL_s;
+    THS_BL(1:length(THS_BL_s),s) = THS_BL_s;
 end
 
-d1BL_mean = mean(d1BL,"omitnan");
+d1BL_mean = mean(THS_BL,"omitnan") - STE_HSR(1,2)/1e3; % STE_HSR(1,2) is the one calculated with window size of 5s
 d1BL_mean = d1BL_mean(:);
 D1BL_mean = d1BL_mean / LF;
 
-% ----- d1, d1C, d1-BL
-figure('Name','d1, d1C, d1BL vs Samp')
-plot(SampInterp,d1C,'-b', LineWidth=2)
+%% ----- Plot D1, D1C, D1BL
+figure('Name','D1, D1C, D1BL vs Samp')
+plot(SampInterp,D1,'-b', LineWidth=2)
 hold on;
-plot(SampC,d1C,'-k', LineWidth=1.5)
-plot(SampBL,d1BL_mean,'o-', markersize=5, LineWidth=2)
+plot(SampCinterp,D1C,'-k', LineWidth=1.5)
+plot(SampBL,D1BL_mean,'-o', markersize=5, LineWidth=2)
 grid on
-title('d1, d1C, d1BL vs \sigma_{amp}')
+title(sprintf('D1, D1C, D1BL vs \sigma_{amp} - %s', test_details))
 xlabel('\sigma_{amp} (MPa)')
-ylabel('d1 (kW/m³)')
-legend ('d1','d1C', 'd1BL',Location='northwest')
+ylabel('D1 (kJ·m^{-3}/cycle)')
+legend ('D1','D1C', 'D1BL',Location='northwest')
 
 % --- Save figure ---
 figTitle = get(get(gca, 'Title'), 'String');
@@ -4478,7 +6118,7 @@ for s = 1:N_segments
     end
 
     % ---- detrend (important for block loading) ----
-    F = detrend(F);
+    F = detrend(F); % detrend best linear fit
 
     % ---- FFT ----
     N = length(F);
@@ -4511,7 +6151,7 @@ xlabel('Frequency (Hz)')
 xticks (0:LF:round(SF_F)/2)
 ylabel('Log Amplitude (N)')
 
-title('BL: Force Single-Sided Amplitude Spectrum per Segment (DC Removed)', test_details);
+title(sprintf('BL: Force Single-Sided Amplitude Spectrum per Segment (DC Removed) - %s', test_details));
 legend(legTxt, 'Location','best');
 grid on;
 
@@ -4523,10 +6163,9 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 
 %% Block Loading: Frequency Analysis From theta data
-thetaSync = thetaSync(:);        % Nx1 temperature signal
-N = length(thetaSync);
+N = length(theta);
 
-dtheta    = diff(thetaSync);
+dtheta    = diff(theta);
 dthetaAbs = abs(dtheta);
 % thr = 0.0039; %
 zz = findpeaks(dthetaAbs);
@@ -4559,7 +6198,7 @@ thetaSeg = NaN(maxLen, numSeg);
 
 for k = 1:numSeg
     idx = segStart(k):segEnd(k);
-    thetaSeg(1:numel(idx), k) = thetaSync(idx);
+    thetaSeg(1:numel(idx), k) = theta(idx);
 end
 
 figure('Name','BL: Theta segments')
@@ -4574,7 +6213,7 @@ domFreq  = NaN(numSeg,1);
 for k = 1:numSeg
     x = thetaSeg(:,k);
     x = x(~isnan(x));        % remove NaN padding
-    x = detrend(x);
+    x = detrend(x);          % detrend best linear fit
     L = length(x);
 
     % FFT parameters
@@ -4608,21 +6247,22 @@ figure('Name','BL: Theta Frequency Analysis'); hold on; box on;
 legTxt = cell(numSeg,1);
 
 for k = 1:numSeg
-    xx = freqCell{k};
+    myWindowSize = freqCell{k};
     yy = ampCell{k};
     yy(1) = NaN;
     % plot(freqCell{k}, log(ampCell{k}), 'LineWidth', 1);
-    plot(xx, (yy), 'LineWidth', 1);
+    plot(myWindowSize, (yy), 'LineWidth', 1);
     legTxt{k} = sprintf('Seg %d', k);
 end
 
 xlabel('Frequency (Hz)', 'Interpreter','latex');
 ylabel('Amplitude', 'Interpreter','latex');
 % title('Frequency Content of All $\theta$ Segments', 'Interpreter','latex');
-title('BL: \theta Single-Sided Amplitude Spectrum per Segment (DC Removed)', test_details);
+title(sprintf('BL: theta Single-Sided Amplitude Spectrum per Segment (DC Removed) - %s', test_details));
 legend(legTxt, 'Location','best');
 grid on;
 
+%--------- sacing plot
 figTitle = get(get(gca, 'Title'), 'String');
 figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
 figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
@@ -4630,14 +6270,11 @@ saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
 %% Block Loading: SHTSA of BL Theta (FFT method)
 
-FL2 = 2*LF;                % 2nd harmonic [Hz]
-FL3 = 3*LF;                % 3rd harmonic [Hz]
-
 % Aliasing check
-if FL3 > SF/2
+if LF3 > SF/2
     warning(['\n################################\n' ...
         'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
-        '################################'], FL3, SF/2);
+        '################################'], LF3, SF/2);
 end
 
 [H1BL, H2BL, H3BL, H1maxBL, H2maxBL, H3maxBL] = deal(nan(N_segments,1));
@@ -4646,7 +6283,7 @@ for s = 1:N_segments
     thetaBL_s = thetaBL(~isnan(thetaBL(:,s)),s);
     N_thetaBL_s = length(thetaBL_s);
 
-    tBL_s = t_BL(~isnan(t_BL(:,s)), s);
+    tBL_s = tThetaSegs(~isnan(tThetaSegs(:,s)), s);
     tBL_s = tBL_s - tBL_s(1);
 
 
@@ -4668,23 +6305,23 @@ for s = 1:N_segments
     for k = 1:nWinBL
 
         end_idx = k+SFnewTSA-1;
-        segment = detrend(thetaBL_s(k : end_idx), 4);
+        segmentC = detrend(thetaBL_s(k : end_idx), 6);
         % segment = detrend(theta(k : end_idx), 1);
-        % segment = theta_C(k : end_idx);
+        % segment = thetaC(k : end_idx);
 
-        beta = abs(fft(segment)) * (2/SFnewTSA);
+        beta = abs(fft(segmentC)) * (2/SFnewTSA);
         idx1 = find(f >= (LF-BW) & f <= (LF+BW));
         [maxAmpH1C(k), j1] = max(beta(idx1)); maxFreqH1C(k) = f(idx1(j1));
         [~, i1] = min(abs(f - LF)); ampAtH1C(k) = beta(i1);
 
-        idx2 = find(f >= (FL2-BW) & f <= (FL2+BW));
+        idx2 = find(f >= (LF2-BW) & f <= (LF2+BW));
         [maxAmpH2C(k), j2] = max(beta(idx2)); maxFreqH2C(k) = f(idx2(j2));
-        [~, i2] = min(abs(f - FL2)); ampAtH2C(k) = beta(i2);
+        [~, i2] = min(abs(f - LF2)); ampAtH2C(k) = beta(i2);
 
-        if FL3<SF/2
-            idx3 = find(f >= (FL3-BW) & f <= (FL3+BW));
+        if LF3<SF/2
+            idx3 = find(f >= (LF3-BW) & f <= (LF3+BW));
             [maxAmpH3C(k), j3] = max(beta(idx3)); maxFreqH3C(k) = f(idx3(j3));
-            [~, i3] = min(abs(f - FL3)); ampAtH3C(k) = beta(i3);
+            [~, i3] = min(abs(f - LF3)); ampAtH3C(k) = beta(i3);
         end
 
     end
@@ -4700,7 +6337,7 @@ end
 
 %% ---BL: TSA Plots of Amplitudes from FFT method ---
 nn = 3;
-if FL3>SF/2
+if LF3>SF/2
     nn = 2;
 end
 
@@ -4734,7 +6371,7 @@ subplot(nn,2,3);
 plot(SampBL, H2BL, 'g-o', 'LineWidth', 2, markersize=5);
 hold on;
 ylabel('Amp (K)');
-title(sprintf('Amp @ %.f Hz', FL2)); grid on;
+title(sprintf('Amp @ %.f Hz', LF2)); grid on;
 % yyaxis right
 % plot(SampBL, thetaBL, 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
@@ -4746,20 +6383,20 @@ subplot(nn,2,4);
 plot(SampBL, H2maxBL, 'm-o', 'LineWidth', 2, markersize=5);
 ylabel('Amp (K)');
 hold on;
-title(sprintf('Max Amp %.f\\pm%.1f Hz', FL2, BW)); grid on;
+title(sprintf('Max Amp %.f\\pm%.1f Hz', LF2, BW)); grid on;
 % yyaxis right
 % plot(SampBL, thetaBL, 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
 xlabel('\sigma_{amp} (MPa)');
 legend('Amp','Location', 'best');
 
 
-if FL3<SF/2
+if LF3<SF/2
     subplot(nn,2,5);
     % yyaxis left
     plot(SampBL, H3BL, 'r-o', 'LineWidth', 2, markersize=5);
     hold on;
     ylabel('Amp (K)');
-    title(sprintf('Amp @ %.f Hz', FL3 )); grid on;
+    title(sprintf('Amp @ %.f Hz', LF3 )); grid on;
     % yyaxis right
     % plot(SampBL, thetaBL, 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('\sigma_{amp} (MPa)');
@@ -4770,7 +6407,7 @@ if FL3<SF/2
     plot(SampBL, H3maxBL, 'c-o', 'LineWidth', 2, markersize=5);
     hold on;
     ylabel('Amp (K)');
-    title(sprintf('Max Amp %.f\\pm%.1f Hz', FL3, BW)); grid on;
+    title(sprintf('Max Amp %.f\\pm%.1f Hz', LF3, BW)); grid on;
     % yyaxis right
     % plot(SampBL, thetaBL, 'Color', [0.85, 0.33, 0.1]); ylabel('\theta (K)');
     xlabel('\sigma_{amp} (MPa)');
@@ -4778,16 +6415,159 @@ if FL3<SF/2
 
 end
 
-sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n (mean \\theta removed) - %s', windowDissipation,test_details));
+sg = sgtitle(sprintf('%.1fs Sliding-Window FFT Harmonic Analysis\n(mean \\theta removed) - %s', windowDissipation, test_details));
 
 % --- Save figure ---
-figTitle = get(get(gca, 'Title'), 'String');
-figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
-figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+figTitle = sg.String;
+if iscell(figTitle)
+    figTitle = strjoin(figTitle,' ');
+end
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars
+figureName = strrep(figureName, ' ', '_');        % replace spaces with underscores
+figureName = strrep(figureName, newline, '_');    % remove newline characters
 saveas(gcf, fullfile(folderPath, [figureName '.fig']));
 
+
+%% ============    BL: Least Square Method Harmonic Amplitudes  =================
+
+% Aliasing check
+if LF3 > SF/2
+    warning(['\n################################\n' ...
+        'Third Harmonic (%.2f Hz) violates Nyquist criterion (%.2f Hz).\n' ...
+        '################################'], LF3, SF/2);
+end
+
+[H1BL_LS,H2BL_LS,H3BL_LS] = deal(nan(N_segments,1));
+
+for s = 1:N_segments
+
+    thetaBL_s = thetaBL(~isnan(thetaBL(:,s)),s);
+    tBL_s     = tThetaSegs(~isnan(tThetaSegs(:,s)),s);
+
+    tBL_s = tBL_s - tBL_s(1);
+
+    N_thetaBL_s = length(thetaBL_s);
+
+    nWinBL = N_thetaBL_s - SFnewTSA + 1;
+
+    % --- Preallocate ---
+    H1_win = nan(nWinBL,1);
+    H2_win = nan(nWinBL,1);
+    H3_win = nan(nWinBL,1);
+
+    for k = 1:nWinBL
+
+        end_idx = k + SFnewTSA - 1;
+
+        % Windowed segment
+        y = thetaBL_s(k:end_idx);
+
+        % Optional detrending
+        y = detrend(y,6);
+
+        % Time vector
+        t = tBL_s(k:end_idx);
+        t = t - t(1);
+
+        % Fundamental angular frequency
+        w1 = 2*pi*LF;
+
+        % =========================================================
+        % Least Squares Harmonic Matrix
+        % =========================================================
+
+        A = [ ...
+            ones(length(t),1), ...
+            sin(w1*t), cos(w1*t), ...
+            sin(2*w1*t), cos(2*w1*t), ...
+            sin(3*w1*t), cos(3*w1*t)];
+
+        % Least squares solution
+        x = A \ y;
+
+        % =========================================================
+        % Harmonic amplitudes
+        % =========================================================
+
+        % First harmonic
+        a1 = x(2);
+        b1 = x(3);
+
+        % Second harmonic
+        a2 = x(4);
+        b2 = x(5);
+
+        % Third harmonic
+        a3 = x(6);
+        b3 = x(7);
+
+        H1_win(k) = sqrt(a1^2 + b1^2);
+        H2_win(k) = sqrt(a2^2 + b2^2);
+        H3_win(k) = sqrt(a3^2 + b3^2);
+
+    end
+
+    % Mean harmonic amplitudes over windows
+    H1BL_LS(s,1) = mean(H1_win,"omitnan");
+    H2BL_LS(s,1) = mean(H2_win,"omitnan");
+    H3BL_LS(s,1) = mean(H3_win,"omitnan");
+
+end
+
+%% ========================= BL: Plot Harmonic Amplitudes =========================
+% First Harmonic
+% ==========================
+
+figure('Name', 'BL: First Harmonic Amplitude'); hold on; grid on; box on;
+
+plot(SampBL, H1BL_LS, '-o', 'LineWidth', 1.5, 'MarkerSize', 6);
+
+xlabel('SampBL');
+ylabel('1st Harmonic Amplitude');
+
+title('First Harmonic vs SampBL');
+
+legend('1st Harmonic', 'Location', 'best');
+
+
+% =========================
+% Second and Third Harmonics
+% ==========================
+
+figure('Name', 'BL: Second Third Harmonic Amplitudes');
+hold on;
+grid on;
+box on;
+
+plot(SampBL, H2BL_LS, '-o', 'LineWidth', 1.5, 'MarkerSize', 6);
+
+plot(SampBL, H3BL_LS, '-o', 'LineWidth', 1.5, 'MarkerSize', 6);
+
+xlabel('SampBL');
+ylabel('Harmonic Amplitude');
+
+title('Higher Harmonics vs SampBL');
+
+legend('2nd Harmonic', '3rd Harmonic', 'Location', 'best');
+
+%%
+saveFolder = 'C:\Users\mo170\OneDrive - The University of Waikato\PhD\My Paper\Figures\Combined Results';
+
+TestData.TestName     = test_details;
+TestData.SampCinterp  = SampCinterp;
+TestData.thetaC       = thetaC;
+TestData.MeanThetaC5s = meanThetaC(:,2);
+
+TestData.SampBL = SampBL;
+TestData.meanD1BL = D1BL_mean;
+TestData.meanH1BL = H1BL_LS;
+TestData.meanH2BL = H2BL_LS;
+TestData.meanH3BL = H3BL_LS;
+
+save(fullfile(saveFolder,[test_details,'.mat']), 'TestData');
+
 %% Block Loading: Saving Variables
-if windowDissipation ~= 3 || BW ~= 1
+if windowDissipation ~= 5 || BW ~= 1
     error('Window size is not 3 seconds or Bandwidth is not 1.');
 end
 
@@ -4795,24 +6575,24 @@ SampC = SampBL;
 d1C = d1BL_mean;
 D1C = D1BL_mean;
 
-ampAtH1C = H1BL;
-ampAtH2C = H2BL;
-ampAtH2Cmean = H2BL;
+ampAtH1C = H1BL_LS;
+ampAtH2C = H2BL_LS;
+ampAtH2Cmean = H2BL_LS;
 
 maxAmpH1C = H1maxBL;
 maxAmpH2C = H2maxBL;
 
 % List of variables to save
-saveVars = {'LF','SF','Force_idxS','Force_idxE','temp_idxS','temp_idxE',...
+saveVars = {'LF','SF','Force_idxS','Force_idxE','temp_idxS','temp_idxE','Ti_idxS','Ti_idxE','BeforeLoad_IdxEnd',...
     'SampInterp','theta', 'd1','D1', 'ampAtH1', 'maxAmpH1','ampAtH2','ampAtH2mean','maxAmpH2',... %'d1_SelfHeating', 'D1_SelfHeating',
-    'SampC','theta_C', 'd1C','D1C', 'ampAtH1C', 'maxAmpH1C','ampAtH2C','ampAtH2Cmean', 'maxAmpH2C'};
+    'SampC','thetaC', 'd1C','D1C', 'ampAtH1C', 'maxAmpH1C','ampAtH2C','ampAtH2Cmean', 'maxAmpH2C'};
 
 % Add H3 variables only when needed
-if FL3 < SF/2
+if LF3 < SF/2
     % ampAtH3 = ampAtH3(loading_window);
     % maxAmpH3 = maxAmpH3(loading_window);
-    ampAtH3C = H3BL;
-    ampAtH3Cmean = H3BL;
+    ampAtH3C = H3BL_LS;
+    ampAtH3Cmean = H3BL_LS;
     maxAmpH3C = H3maxBL;
     saveVars = [saveVars, {'ampAtH3', 'ampAtH3mean','maxAmpH3','ampAtH3C', 'ampAtH3Cmean','maxAmpH3C'}];
 end
@@ -4843,9 +6623,305 @@ save(matFileName, '-struct', 'SegEndLocs');
 
 fprintf('\nSaved variables to:\n%s\n', matFileName);
 
-
+%% End of Scrip Sound
+Fs = 44100;
+t = 0:1/Fs:0.3;
+y = sin(2*pi*1000*t);
+sound(y, Fs)
 
 %%
 % 3-Mar-2026
 % Trying to process SS304 2026 data. However, there is an issue of frames
 % dropped. Need to lookinto the issue.
+
+
+
+%%
+figure('Name','Continuous: First Harmonic Amplitude vs SampC'); 
+plot(SampCinterp_x, ampAtH1C(loading_window), 'k', 'LineWidth', 2);
+ylabel('Amplitude (K)');
+title(sprintf('Continuous: First Harmonic Amplitude vs SampC @ %.f Hz', LF)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+figure('Name','Continuous: Second Harmonic Amplitude vs SampC'); 
+plot(SampCinterp_x, movmean(ampAtH2C(loading_window)*1e3, SF*5, 'Endpoints', 'fill'), '-g', 'LineWidth', 2);
+ylabel('Amplitude (mK)');
+title(sprintf('Continuous: Second Harmonic Amplitude vs SampC @ %.f Hz', LF)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+figure('Name','Continuous: Third Harmonic Amplitude vs SampC'); 
+plot(SampCinterp_x, movmean(ampAtH3C(loading_window)*1e3, SF*5, 'Endpoints', 'fill'), '-g', 'LineWidth', 2);
+ylabel('Amplitude (mK)');
+title(sprintf('Continuous: Third Harmonic Amplitude vs SampC @ %.f Hz', LF)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+%%
+figure('Name','Continuous: 2nd 3rd Harmonic Amplitude vs SampC'); 
+plot(SampCinterp_x, movmean(ampAtH2C(loading_window)*1e3, SF*5, 'Endpoints', 'fill'), '-g', 'LineWidth', 2);
+hold on
+plot(SampCinterp_x, movmean(ampAtH3C(loading_window)*1e3, SF*5, 'Endpoints', 'fill'), '-b', 'LineWidth', 2);
+ylabel('Amplitude (mK)');
+title(sprintf('Continuous: 2nd and 3rd Harmonic Amplitude vs SampC @ %.f Hz', LF)); grid on;
+xlabel('\sigma_{amp} (MPa)');
+
+% --- Save figure ---
+figTitle = get(get(gca, 'Title'), 'String');
+figureName = regexprep(figTitle, '[^\w\s-]', '');  % remove special chars (like :)
+figureName = strrep(figureName, ' ', '_');           % replace spaces with underscores
+saveas(gcf, fullfile(folderPath, [figureName '.fig']));
+
+
+%%
+%% Continuous: Frequency Analysis of Theta of Loading Period
+% T0DC_fatigue = T0DC_fatigue;
+
+N_thetaCLoading = length(T0DC_fatigue);
+f = (0:floor(N_thetaCLoading/2)) * (SF / N_thetaCLoading);
+
+% FFT computation
+P1 = abs(fft(T0DC_fatigue,N_thetaCLoading)) * (2/N_thetaCLoading);
+P1 = P1(1 : floor(N_thetaCLoading/2)+1);
+P1(1) = NaN; % Remove DC component
+
+figure('Name', 'Continuous: Amplitude Spectrum');
+plot(f, log(P1), '.r', 'MarkerSize', 5, DisplayName='theta-loading'); hold on;
+title('Continuous: T0D (loading) Frequency Analysis', test_details);
+xlabel('Frequency (Hz)');
+xticks(0:LF:ceil(SF/2/100)*100)
+ylabel('Amplitude (log)');
+grid on;
+legend
+
+N_thetaCLoadingTrunc = N_thetaCLoading;
+while mod(N_thetaCLoadingTrunc, SF/LF) >= 1e-9
+    N_thetaCLoadingTrunc = N_thetaCLoadingTrunc -1;
+end
+
+
+% T_total = N_thetaCLoading / SF;
+% k = floor(T_total * LF);   % integer number of cycles
+% T_trunc = k / LF;
+% N_thetaCLoadingTruncX = floor(T_trunc * SF);
+
+
+Ndiff = N_thetaCLoading - N_thetaCLoadingTrunc;
+thetaCTruncIdx = Ndiff+1:N_thetaCLoading;
+
+thetaTrunc = T0DC_fatigue(thetaCTruncIdx);
+
+fTrunc = (0:floor(N_thetaCLoadingTrunc/2)) * (SF / N_thetaCLoadingTrunc);
+
+% FFT computation
+P1TruncX = abs(fft(thetaTrunc,N_thetaCLoadingTrunc)) * (2/N_thetaCLoadingTrunc);
+P1TruncX = P1TruncX(1 : floor(N_thetaCLoadingTrunc/2)+1);
+P1TruncX(1) = NaN; % Remove DC component
+
+hold on
+plot(fTrunc, log(P1TruncX), '.b', 'MarkerSize', 5, DisplayName='theta-loading truncated');
+
+
+%%
+saveFolder = 'C:\Users\mo170\OneDrive - The University of Waikato\PhD\My Paper\Figures\Combined_Theta';
+
+TestData.TestName     = test_details;
+TestData.SampCinterp  = SampCinterp;
+TestData.MeanThetaC5s = meanThetaC(:,2);
+TestData.thetaC       = thetaC;
+TestData.D1C5s = D1Cxx(:,2);
+
+TestData.SampCHarmonic = SampCinterp_x;
+TestData.H1C5s = AmpH1C_LS;
+TestData.H2C5s = AmpH2C_LS;
+TestData.H3C5s = AmpH3C_LS;
+
+save(fullfile(saveFolder,[test_details,'.mat']), 'TestData');
+
+
+
+%%
+files = dir(fullfile(saveFolder,'*.mat'));
+
+for k = 1:length(files)
+
+    load(fullfile(saveFolder,files(k).name));
+
+    theta  = TestData.thetaC;
+    stress = TestData.SampCinterp;
+
+    plot(stress, theta)
+    hold on
+
+end
+
+
+
+
+
+
+%% Rough work
+% Min-max normalization of all series
+thetaC_n      = (thetaC - min(thetaC)) / (max(thetaC) - min(thetaC));
+meanThetaC_n  = movmean(thetaC_n,SFnewTSA,'Endpoints','fill'); %(meanThetaC(:,2) - min(meanThetaC(:,2))) / (max(meanThetaC(:,2)) - min(meanThetaC(:,2)));
+
+AmpH3_mov = movmean(AmpH3C_LS*1e3, SFnewTSA, 'Endpoints','fill');
+AmpH2_mov = movmean(AmpH2C_LS*1e3, SFnewTSA, 'Endpoints','fill');
+
+
+AmpH3_n = (AmpH3_mov - min(AmpH3_mov)) / (max(AmpH3_mov) - min(AmpH3_mov));
+AmpH2_n = (AmpH2_mov - min(AmpH2_mov)) / (max(AmpH2_mov) - min(AmpH2_mov));
+
+% Single plot (all normalized to [0 1])
+figure;
+plot(SampCinterp,   thetaC_n,     '-r', 'LineWidth', 1.5); hold on;
+plot(SampCinterp,   meanThetaC_n, '-g', 'LineWidth', 2);
+ylabel('\theta Normalized amplitude (min-max)');
+
+yyaxis right
+plot(SampCinterp_x, AmpH3_n,      '-k', 'LineWidth', 2.5);
+plot(SampCinterp_x, AmpH2_n,      '-b', 'LineWidth', 2.5);
+ylabel('Harmonics Normalized amplitude (min-max)');
+
+ylim([0 1]);
+xlim([0 210]);
+xticks(0:30:210);
+
+grid on; box on;
+xlabel('Sample / Time');
+
+legend('\theta_C', 'mean\Theta_C(:,2)', 'AmpH3_{LS} (movmean)', 'AmpH2_{LS} (movmean)', ...
+       'Location', 'best');
+title('Min-max normalized comparison');
+set(gcf,'MenuBar','figure','ToolBar','figure');
+
+xlim([14 60])
+yyaxis left
+ylim([0 0.008])
+yyaxis right
+ylim([.0 .5])
+
+%%
+close all
+figure;
+yyaxis left
+plot(SampCinterp, thetaC, '-r', 'LineWidth', 1.5); hold on;
+plot(SampCinterp, meanThetaC(:,2), '-g', 'LineWidth', 2);
+ylabel('K');
+ylim([-1 24]);          % your left-axis range
+
+yyaxis right
+plot(SampCinterp_x, movmean(AmpH3C_LS*1e3, SFnewTSA, 'Endpoints','fill'), '-k', 'LineWidth', 2.5);
+plot(SampCinterp_x, movmean(AmpH2C_LS*1e3, SFnewTSA, 'Endpoints','fill'), '-b', 'LineWidth', 2.5);
+ylabel('mK');
+
+% ---- Align zeros ----
+% Left axis currently goes from -2 to 24  →  total span = 26
+% Zero is located at 2/26 ≈ 0.077 of the way up from the bottom.
+
+leftMin = -1;
+leftMax = 24;
+fracZero = -leftMin / (leftMax - leftMin);   % fraction from bottom where zero sits
+
+% Right axis data goes 0 → 4. We keep the same fraction for zero.
+rightDataMax = 4;
+rightMin = -rightDataMax * fracZero / (1 - fracZero);
+rightMax = rightDataMax;
+
+ylim([rightMin rightMax]);
+% ylim([-0.5 4])
+
+xlim([0 210])
+xticks(0:30:210)
+
+grid on; box on;
+xlabel('Sample / Time');
+% legend('\theta_C', 'mean\Theta_C(:,2)', 'AmpH2C_{LS} \times 10^3', 'Location', 'best');
+title('Comparison of \theta_C, mean\Theta_C and AmpH2');
+set(gcf,'MenuBar','figure','ToolBar','figure');
+
+xlim([14 80])
+yyaxis left
+ylim([-.15 0.02])
+yyaxis right
+ylim([.02 0.5])
+
+%% Saving variable to Excel Spreadsheet
+AmpH3_mov = movmean(AmpH3C_LS*1e3, SFnewTSA, 'Endpoints','fill');
+AmpH2_mov = movmean(AmpH2C_LS*1e3, SFnewTSA, 'Endpoints','fill');
+
+n1 = length(SampCinterp);
+n2 = length(SampCinterp_x);
+N  = max(n1, n2);
+
+% Pad shorter vectors with NaN
+SampCinterp_p   = [SampCinterp(:); NaN(N-n1,1)];
+thetaC_p        = [thetaC(:);      NaN(N-n1,1)];
+meanThetaC_p    = [meanThetaC(:,2); NaN(N-n1,1)];
+D1C_p             = [D1Cxx(:,2);   NaN(N-n1,1)];
+
+SampCinterp_x_p = [SampCinterp_x(:); NaN(N-n2,1)];
+AmpH3_p         = [AmpH3_mov(:);   NaN(N-n2,1)];
+AmpH2_p         = [AmpH2_mov(:);   NaN(N-n2,1)];
+
+
+T = table(SampCinterp_p, thetaC_p, meanThetaC_p, D1C_p,...
+          SampCinterp_x_p, AmpH3_p, AmpH2_p, ...
+    'VariableNames', {'SampCinterp','thetaC','meanThetaC', 'D1C',...
+                      'SampCinterp_x','AmpH3_movmean_mK','AmpH2_movmean_mK'});
+
+writetable(T, 'theta_and_amplitudes.xlsx');
+%%
+figure('Name','Continuous: LS H2 & H3 Amplitudes vs Stress'); hold on; grid on
+title(sprintf('Continuous: LS H2 and H3 Amplitudes - porder = %0.0f', pOrder))
+
+h = plot(SampCinterp_x, AmpH3C_LS*1e3, 'ob','MarkerSize',2,'DisplayName','H3 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(SampCinterp_x, AmpH2C_LS*1e3, 'or','MarkerSize',2,'DisplayName','H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+h = plot(SampCinterp_x, AmpH4C_LS*1e3, 'ok','MarkerSize',2,'DisplayName','H2 Raw');
+set(h, 'MarkerFaceColor', h.Color);
+
+xlabel('\sigma_{amp} (MPa)')
+ylabel('Amplitude (mK)')
+legend
+
+xlim([0 210])
+xticks(0:30:210)
+xtickangle(90)
+
+ylim([0 4])
+yticks(0:1:4)
+set(gcf, 'Position', [688 535 657 480])
+set(gca, 'FontSize', 20)
+set(gcf,'MenuBar','figure','ToolBar','figure');
+box on
+
+figure('Name', 'Continuous: theta, Avg.Theta vs SampC');
+plot(SampCinterp, thetaC, '-r', LineWidth=5); hold on; %
+plot(SampCinterp, meanThetaC(:,1),'-k', linewidth= 2); grid
+plot(SampCinterp, meanThetaC(:,2),'g-',linewidth= 2); 
+plot(SampCinterp, meanThetaC(:,3),'-b',linewidth= 2); 
+xlabel('\sigma_{amp} (MPa)');
+ylabel('(\theta) (K)');
+title(sprintf('Continuous: Theta, Averged theta vs Stress Amplitude - %s', test_details));
+legend('\theta','\theta_{avg-1s}','\theta_{avg-5s}','\theta_{avg-9s}','Location','northwest');
